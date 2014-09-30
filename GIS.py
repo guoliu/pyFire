@@ -1,7 +1,7 @@
 from configure import*
 
 ####################################################################################################
-def gisRead(flnm):
+def read(flnm):
     g = gdal.Open(flnm, gdal.GA_ReadOnly)
     band = g.GetRasterBand(1)
     if band is None:
@@ -19,7 +19,7 @@ def gisRead(flnm):
     return data
 
 ####################################################################################################
-def gisResamp(infile, outfile, method = 'average', noData = -9999, resol = 'coarse', sSrs = ''):
+def resamp(infile, outfile, method = 'average', noData = -9999, resol = 'coarse', sSrs = ''):
     if sSrs is not '':
         sSrs = ' -s_srs ' + sSrs
 
@@ -33,10 +33,10 @@ def gisResamp(infile, outfile, method = 'average', noData = -9999, resol = 'coar
         print 'Unsupported resulotion: ', resol
         return
 
-    #return gisRead(outfile)
+    #return read(outfile)
 
 ####################################################################################################
-def gisWrite(indata, outfile, template, noData = gNoData, drivernm = 'GTiff', dtype=gdal.GDT_Float32):
+def write(indata, outfile, template, noData = gNoData, drivernm = 'GTiff', dtype=gdal.GDT_Float32):
     print 'Writing data to ', outfile 
     G = gdal.Open(template, gdal.GA_ReadOnly) #open data                    
     try:
@@ -53,16 +53,27 @@ def gisWrite(indata, outfile, template, noData = gNoData, drivernm = 'GTiff', dt
     dataset_out.SetGeoTransform ( geo_transform )
     dataset_out.SetProjection ( srs )
     raster_out = dataset_out.GetRasterBand ( 1 )
+    
+    indata[np.isnan(indata)] = noData
     raster_out.WriteArray (indata)
     raster_out.SetNoDataValue(noData)
     dataset_out.FlushCache()
     dataset_out = None
     
-    #gisResamp('temp.tif', outfile, method = method)
-    #return gisRead(outfile)
+    #resamp('temp.tif', outfile, method = method)
+    #return read(outfile)
 
 ####################################################################################################
-def convertXY(xy_source, inproj, outproj):
+### combine and resample tiles to GeoTiff with a given product name and date
+def mosa(oldPref, newFile, method='average', oldSuff='.tif'):
+    nmlist = [oldPref+'h'+str(tileList[num][0]).zfill(2)+'v'+str(tileList[num][1]).zfill(2) +oldSuff for num in range(len(tileList))]
+    tilestr = ' '.join(nmlist)
+    
+    resamp(tilestr, newFile, method=method)
+    return read(newFile)
+
+####################################################################################################
+def cordConv(xy_source, inproj, outproj):
     # function to convert coordinates
 
     shape = xy_source[0,:,:].shape
@@ -77,4 +88,3 @@ def convertXY(xy_source, inproj, outproj):
     yy = xy_target[:,1].reshape(shape)
 
     return xx, yy
-

@@ -1,8 +1,9 @@
 from configure import*
-from .GIS import*
+from . import GIS
+from . import matr
 
 ####################################################################################################
-def mapPlt(flnm, fignm, titlTxt, projMap = None, scale = 1.0, log = False, maskNum = None, vMin=None, vMax=None, cmNm = 'Spectral_r', lut = None):
+def mapDraw(flnm, fignm, titlTxt, projMap = None, scale = 1.0, log = False, maskNum = None, vMin=None, vMax=None, cmNm = 'Spectral_r', lut = None):
     print 'Plotting map from',flnm,'to', fignm
     from mpl_toolkits.basemap import Basemap
     from numpy import ma
@@ -14,7 +15,7 @@ def mapPlt(flnm, fignm, titlTxt, projMap = None, scale = 1.0, log = False, maskN
     # Read the data and metadata
     ds = gdal.Open(flnm)
 
-    data = gisRead(flnm)*scale
+    data = GIS.read(flnm)*scale
     gt = ds.GetGeoTransform()
     proj = ds.GetProjection()
 
@@ -51,7 +52,7 @@ def mapPlt(flnm, fignm, titlTxt, projMap = None, scale = 1.0, log = False, maskN
 
     outproj = osr.SpatialReference()
     outproj.ImportFromProj4(m.proj4string)
-    xx, yy = convertXY(xy_source, inproj, outproj)
+    xx, yy = GIS.cordConv(xy_source, inproj, outproj)
 
     # plot the data (first layer)
     colmap = plt.cm.get_cmap(cmNm, lut)
@@ -118,7 +119,6 @@ def axAdj(ax):
 
 ####################################################################################################
 ####################################################################################################
-
 def cover_hisPlt():
     his = np.bincount(cover[~(cover==17)])
     freq = np.argsort(his)[::-1]
@@ -137,7 +137,7 @@ def cover_hisPlt():
     plt.close()
 
 ####################################################################################################
-def hisPlt(data, xtext, ttext, figname):
+def hist(data, xtext, ttext, figname):
     #mpl.use('PDF')
     import matplotlib.pyplot as plt, prettyplotlib as ppl
     
@@ -151,7 +151,7 @@ def hisPlt(data, xtext, ttext, figname):
     plt.close()
 
 ####################################################################################################
-def aver2D_plt(x,y,z,xlabel,ylabel,zlabel,flnm):
+def aver2D(x,y,z,xlabel,ylabel,zlabel,flnm):
     binN = 40
     mask = ~(np.isnan(x)|np.isnan(y)|np.isnan(z)|(cover==veg_dict['urban'])|(cover==veg_dict['crop'])|(cover==veg_dict['cryo']))
     H1, _, _ = np.histogram2d(x[mask], y[mask], weights = z[mask], bins = binN)
@@ -176,7 +176,7 @@ def aver2D_plt(x,y,z,xlabel,ylabel,zlabel,flnm):
     plt.close()
 
 ####################################################################################################
-def scatPlt(xRaw, yRaw,  nmList, figNm, divider=None, text=None, percen=95, alpha=0.4):    
+def scatter(xRaw, yRaw,  nmList, figNm, divider=None, text=None, percen=95, alpha=0.4, upp = True, med = True):    
     if text is None:
         titText, xText, yText = ''
     else: 
@@ -190,8 +190,7 @@ def scatPlt(xRaw, yRaw,  nmList, figNm, divider=None, text=None, percen=95, alph
         print 'Length of name list:', len(nmList)
         return
 
-
-    xRaw, yRaw, divider = valiData([xRaw, yRaw, divider])
+    xRaw, yRaw, divider = matr.crossMask([xRaw, yRaw, divider])
     almost_black = '#262626'
     #mpl.use('PDF')
     import matplotlib.pyplot as plt, brewer2mpl
@@ -206,7 +205,7 @@ def scatPlt(xRaw, yRaw,  nmList, figNm, divider=None, text=None, percen=95, alph
         color = clm[i%8]
         ax.scatter(x, y, label=nmList[i], alpha=alpha, edgecolor=almost_black, facecolor=color, linewidth=0.15)
         alpha = alpha*.8
-    xNew, yUpp, yMed = binPer(xRaw, yRaw, percen = percen)
+    xNew, yUpp, yMed = matr.binPer(xRaw, yRaw, percen = percen)
     ax.plot(xNew, yUpp, color='black', linewidth=0.7, label='Upper '+ str(percen) +' percentage', alpha=0.6)
     ax.plot(xNew, yMed, color='blue', linewidth=0.7, label='Median', alpha=0.6)
     axAdj(ax)

@@ -1,32 +1,5 @@
-#!/usr/bin/env python
-import datetime, os, osr, numpy as np 
-from osgeo import gdal
-from scipy import stats
-
-veg_dict = {'water': 0,
-          'greenNeedle': 1,
-          'greenBroad': 2,
-          'deciNeedle': 3,
-          'deciBroad': 4,
-          'mixed': 5,
-          'closedShrub': 6,
-          'openShrub': 7,
-          'woodySavanna': 8,
-          'savanna': 9,
-          'grass': 10,
-          'wetland': 11,
-          'crop': 12,
-          'urban': 13,
-          'mosaic': 14,
-          'cryo': 15,
-          'barren': 16,
-          'unclass': 17}
-
-
-tilelist = [[16,6],[16,7],[16,8],[17,5],[17,6],[17,7],[17,8],[18,5],[18,6],[18,7],[18,8],[18,9],[19,5],[19,6],[19,7],[19,8],[19,9],[19,10],[19,11],[19,12],[20,5],[20,6],[20,7],[20,8],[20,9],[20,10],[20,11],[20,12],[21,6],[21,7],[21,8],[21,9],[21,10],[21,11],[22,7],[22,8],[22,9],[23,7],[23,8]] 
-startY, endY = 2000, 2014
-dataPath = os.environ['DATA']
-gNoData = -9999
+from .analy import*
+import .GIS
 
 ####################################################################################################
 ### return iteration struture of datetime with given interval
@@ -40,80 +13,7 @@ def timerange(startY, endY, inter):
         return (datetime.date(y, 1, 1) for y in range(startY, endY))
     print 'Unsupported interval type'
 
-####################################################################################################
-def gisRead(flnm):
-    g = gdal.Open(flnm, gdal.GA_ReadOnly)
-    band = g.GetRasterBand(1)
-    if band is None:
-        subdataset = gdal.Open(g.GetSubDatasets()[0][0], gdal.GA_ReadOnly)
-        band = subdataset.GetRasterBand(1)
 
-    data = band.ReadAsArray()
-    if band.GetNoDataValue():
-        data = data.astype(np.float)
-        data[data==band.GetNoDataValue()] = np.nan
-    #if g.RasterCount>1:
-    #    mask = g.GetRasterBand(2)
-    #    maskData = mask.ReadAsArray()==255
-    #    data[~maskData] = np.nan
-    return data
-
-####################################################################################################
-def gisResamp(infile, outfile, method = 'average', noData = gNoData, resol = 'coarse', sSrs = ''):
-    if sSrs is not '':
-        sSrs = ' -s_srs ' + sSrs
-
-    if resol == 'coarse':
-        os.system('gdalwarp -ot Float32 -wt Float32 -overwrite%s -t_srs $DATA/MODIS.prf -cutline $DATA/Africa/Africa.shp -crop_to_cutline -dstnodata %s -r %s -tr 27829.75 27829.75 %s %s' %(sSrs, str(noData), method, infile, outfile))
-    elif resol == 'fine':
-        os.system('gdalwarp -ot Float32 -wt Float32 -overwrite%s -t_srs $DATA/MODIS.prf -cutline $DATA/Africa/Africa.shp -crop_to_cutline -dstnodata %s -r %s -tr 5565.95 5565.95 %s %s' %(sSrs, str(noData), method, infile, outfile))
-    elif resol == 'origin':
-        os.system('gdalwarp -overwrite%s -t_srs $DATA/MODIS.prf -cutline $DATA/Africa/Africa.shp -crop_to_cutline -dstnodata %s -r %s %s %s' %(sSrs, str(noData), method, infile, outfile))
-    else: 
-        print 'Unsupported resulotion: ', resol
-        return
-
-    return gisRead(outfile)
-
-####################################################################################################
-def gisWrite(indata, outfile, template, noData = gNoData, drivernm = 'GTiff', dtype=gdal.GDT_Float32):
-    print 'Writing data to ', outfile 
-    G = gdal.Open(template, gdal.GA_ReadOnly) #open data                    
-    try:
-        g = gdal.Open(G.GetSubDatasets()[0][0], gdal.GA_ReadOnly)
-    except:
-        g = G 
-    geo_transform = g.GetGeoTransform() #geotransform 
-    x_size = g.RasterXSize # Raster xsize
-    y_size = g.RasterYSize # Raster ysize
-    srs = g.GetProjectionRef() # Projection
-
-    driver = gdal.GetDriverByName (drivernm)
-    dataset_out = driver.Create (outfile, x_size, y_size, 1, dtype)
-    dataset_out.SetGeoTransform ( geo_transform )
-    dataset_out.SetProjection ( srs )
-    raster_out = dataset_out.GetRasterBand ( 1 )
-    raster_out.WriteArray (indata)
-    raster_out.SetNoDataValue(noData)
-    dataset_out.FlushCache()
-    dataset_out = None
-    
-    #gisResamp('temp.tif', outfile, method = method)
-    #return gisRead(outfile)
-
-####################################################################################################
-### combine and resample tiles to GeoTiff with a given product name and date
-def gisMosa(oldPref, newFile, method='average', oldSuff='.tif'):
-    nmlist = [oldPref+'h'+str(tilelist[num][0]).zfill(2)+'v'+str(tilelist[num][1]).zfill(2) +oldSuff for num in range(len(tilelist))]
-    tilestr = ' '.join(nmlist)
-    
-    gisResamp(tilestr, newFile, method=method)
-    return gisRead(newFile)
-
-####################################################################################################
-####################################################################################################
-####################################################################################################
-####################################################################################################
 def timeAver(oldPref, oldSuff, newFile, inter, method='average', start = startY, end = endY, dtype=gdal.GDT_Float32):
        
     nmlist = [oldPref + dp.strftime('%Y') + dp.strftime('%j') + oldSuff for dp in timerange(start, end, inter) if os.path.isfile(oldPref + dp.strftime('%Y') + dp.strftime('%j') + oldSuff)]
@@ -153,7 +53,7 @@ def timeAver(oldPref, oldSuff, newFile, inter, method='average', start = startY,
     print 'Maxima: ', np.nanmax(result)
     print 'Minima: ', np.nanmin(result)
 
-    gisWrite(result, newFile, dataName, nodata = noData, dtype=dtype)
+    GIS.write(result, newFile, dataName, nodata = noData, dtype=dtype)
 
 ####################################################################################################
 def firePeak(tile, start=startY+1, end=endY):
@@ -182,7 +82,7 @@ def firePeak(tile, start=startY+1, end=endY):
     print 'Peak month: writing data for ', tile 
     season = np.argmax(fireFreq, axis=2)+1 
     season[~fireFreq.any(axis=2)] = gNoData
-    gisWrite(season, flnm, dataset.GetSubDatasets()[0][0], dtype=gdal.GDT_Int16)
+    GIS.write(season, flnm, dataset.GetSubDatasets()[0][0], dtype=gdal.GDT_Int16)
 
 ####################################################################################################
 def burnFracTile(tile, winLen = 9):
@@ -193,16 +93,14 @@ def burnFracTile(tile, winLen = 9):
     #if os.path.isfile(dst+'MCD64A1.burnFracWin'+str(winLen).zfill(2)+'.'+tile+'.tif'):
     #    return
 
-    peak = gisRead(peakFileNm) 
+    peak = GIS.read(peakFileNm) 
     staMon = (peak-np.ceil(winLen/2.0))%12+1 #when winLen=12 peak=5, staMon = 12, endMon = 11
     endMon = (peak+np.floor(winLen/2.0)-1)%12+1
     del peak
     
-    annuPre = np.zeros((2400, 2400), dtype=np.int) #present year annual burnt
-    annuAcu = np.zeros((2400, 2400), dtype=np.int) #accumulate annual burnt
-    yeaCoun = np.zeros((2400, 2400), dtype=np.int) #count number of years
-    outCoun = np.zeros((2400, 2400), dtype=np.int) #pixels that burnt outside fire season
-    rebMask = np.zeros((2400, 2400), dtype=np.int) #pixels that reburnt    
+    annuPre, annuAcu, yeaCoun, outCoun, rebCoun = \
+        [np.zeros((2400, 2400), dtype=np.int) for _ in xrange(5)] #present year annual burnt
+    #present year fire, accumulate annual fire, number of years, fire outside fire season, reburnt
 
     nodMask = np.ones((2400, 2400), dtype=np.bool) #nodata mask
     recMask = np.zeros((2400, 2400), dtype=np.bool) #recording mask
@@ -214,56 +112,56 @@ def burnFracTile(tile, winLen = 9):
         if not os.path.isfile(flnm):
             continue
         recMask[staMon==dp.month] = True #recording starts
-        outMask[staMon==dp.month] = True #recording starts
+        outMask[staMon==dp.month] = True #recording starts, no turning off
 
-        fire = gisRead(flnm)
+        fire = GIS.read(flnm)
         annuPre[recMask] += fire[recMask]>0
         nodMask = nodMask&np.isnan(fire)
         
-        rebMask[annuPre>1] = 1 
         outCoun[(~recMask)&outMask] += fire[(~recMask)&outMask]>0 #burnt outside of fire season
-
         endMask = (endMon==dp.month)&recMask #Mask to end and re-initialize.
         annuAcu[endMask] += annuPre[endMask]>0 #Burnt pixels
         annuPre[endMask] = 0 #initialize present count to zero
         yeaCoun[endMask] += 1 #add one to year number
+        rebCoun[(annuPre>1)&endMask] += 1 #
         recMask[endMask] = False #recording ends
     
     noBurnMask = yeaCoun==0
     yeaCoun[noBurnMask] = 1
-    frac = annuAcu*1.0/yeaCoun
-    frac[noBurnMask] = 0
-    frac[nodMask] = gNoData
-    rebMask[nodMask] = gNoData
     
-    out = outCoun*1.0/(yeaCoun-1)
-    out[noBurnMask] = 0
-    out[nodMask] = gNoData
-    
-    gisWrite(frac, dst+'MCD64A1.burnFracWin'+str(winLen).zfill(2)+'.'+tile+'.tif', peakFileNm)
-    gisWrite(rebMask, dst+'MCD64A1.reBurnWin'+str(winLen).zfill(2)+'.'+tile+'.tif', peakFileNm)
-    gisWrite(out, dst+'MCD64A1.outCounWin'+str(winLen).zfill(2)+'.'+tile+'.tif', peakFileNm)
+    def aver(dataRaw):
+        data = dataRaw*100.0/yeaCoun
+        data[noBurnMask] = 0
+        data[nodMask] = gNoData
+        return data
+
+    frac = aver(annuAcu)
+    out = aver(outCoun)
+    reb = aver(rebCoun)
+
+    GIS.write(frac, dst+'MCD64A1.burnFracWin'+str(winLen).zfill(2)+'.'+tile+'.tif', peakFileNm)
+    GIS.write(reb, dst+'MCD64A1.reBurnWin'+str(winLen).zfill(2)+'.'+tile+'.tif', peakFileNm)
+    GIS.write(out, dst+'MCD64A1.outCounWin'+str(winLen).zfill(2)+'.'+tile+'.tif', peakFileNm)
 
 ####################################################################################################
 def burnFrac(winLen = 9):
-    dst = os.environ['DATA']+'/Africa/'
-    [burnFracTile('h'+str(tilelist[num][0]).zfill(2)+'v'+str(tilelist[num][1]).zfill(2), winLen = winLen) for num in range(len(tilelist))]
-    gisMosa(os.environ['DATA'] + '/MODIS/MCD64A1/annual/MCD64A1.reBurnWin'+str(winLen).zfill(2)+'.', dst+'MCD64A1.reBurnWin'+str(winLen).zfill(2)+'.tif')
-    gisMosa(os.environ['DATA'] + '/MODIS/MCD64A1/annual/MCD64A1.outCounWin'+str(winLen).zfill(2)+'.', dst+'MCD64A1.outCounWin'+str(winLen).zfill(2)+'.tif')
-    gisMosa(os.environ['DATA'] + '/MODIS/MCD64A1/annual/MCD64A1.burnFracWin'+str(winLen).zfill(2)+'.', dst+'MCD64A1.burnFracWin'+str(winLen).zfill(2)+'.tif')
+    [burnFracTile('h'+str(tileList[num][0]).zfill(2)+'v'+str(tileList[num][1]).zfill(2), winLen = winLen) for num in range(len(tileList))]
+    GIS.mosa(os.environ['DATA'] + '/MODIS/MCD64A1/annual/MCD64A1.reBurnWin'+str(winLen).zfill(2)+'.', outPath+'MCD64A1.reBurnWin'+str(winLen).zfill(2)+'.tif')
+    GIS.mosa(os.environ['DATA'] + '/MODIS/MCD64A1/annual/MCD64A1.outCounWin'+str(winLen).zfill(2)+'.', outPath+'MCD64A1.outCounWin'+str(winLen).zfill(2)+'.tif')
+    GIS.mosa(os.environ['DATA'] + '/MODIS/MCD64A1/annual/MCD64A1.burnFracWin'+str(winLen).zfill(2)+'.', outPath+'MCD64A1.burnFracWin'+str(winLen).zfill(2)+'.tif')
 
 ####################################################################################################
 def burnArea():
     ## Count the burnt frequency on annual-resolution
     dst = os.environ['DATA'] + '/MODIS/MCD64A1/annual/'
     afri = os.environ['DATA']+'/Africa/'
-    #water = gisRead(afri+'MCD12Q1.waterMask.tif')
+    #water = GIS.read(afri+'MCD12Q1.waterMask.tif')
     #water[water==1] = np.nan
     
     area = np.zeros((2400,2400), dtype=np.int)
     for year in range(startY+1, endY):
-        for num in range(len(tilelist)):
-            tile = 'h'+str(tilelist[num][0]).zfill(2)+'v'+str(tilelist[num][1]).zfill(2)
+        for num in range(len(tileList)):
+            tile = 'h'+str(tileList[num][0]).zfill(2)+'v'+str(tileList[num][1]).zfill(2)
             src = os.environ['DATA'] + '/MODIS/MCD64A1/raw/' + tile + '/'
             outfl = dst+'MCD64A1.burnArea'+str(year)+'.'+tile+'.tif'
             if os.path.isfile(outfl):
@@ -273,38 +171,38 @@ def burnArea():
             nodMask = np.ones((2400,2400), dtype=np.bool)
             for dp in timerange(year, year+1, 'month'):         
                 flnm = src + 'MCD64A1.A' + dp.strftime('%Y') + dp.strftime('%j') + '.' + tile + '.hdf'
-                fire = gisRead(flnm)
+                fire = GIS.read(flnm)
                 annuBurn[fire>0] = 1
                 nodMask = np.isnan(fire)&nodMask
             annuBurn[nodMask] = gNoData
-            gisWrite(annuBurn, outfl, flnm)
-    arrStac = np.dstack((gisMosa(dst+'MCD64A1.burnArea'+str(year)+'.', dst+'MCD64A1.burnArea'+str(year)+'.tif') for year in range(startY+1, endY)))
+            GIS.write(annuBurn, outfl, flnm)
+    arrStac = np.dstack((GIS.mosa(dst+'MCD64A1.burnArea'+str(year)+'.', dst+'MCD64A1.burnArea'+str(year)+'.tif') for year in range(startY+1, endY)))
     aveArea = np.nanmean(arrStac, axis=2) 
     aveArea[np.isnan(aveArea)] = gNoData 
-    gisWrite(aveArea, afri+'MCD64A1.burnAreaNatrYear.tif', afri+'MCD64A1.freq.tif')  
+    GIS.write(aveArea, afri+'MCD64A1.burnAreaNatrYear.tif', afri+'MCD64A1.freq.tif')  
 
 ####################################################################################################
 def fireMosa():
     src = os.environ['DATA'] + '/MODIS/MCD64A1/annual/'
     dst = os.environ['DATA'] + '/Africa/'
 
-    [fireCount('h'+str(tilelist[num][0]).zfill(2)+'v'+str(tilelist[num][1]).zfill(2)) for num in range(len(tilelist))]
-    gisMosa(src+'MCD64A1.freq.', dst+'MCD64A1.freq.africa.tif')
-    gisMosa(src+'MCD64A1.reBurn.', dst+'MCD64A1.reBurn.africa.tif')
+    [fireCount('h'+str(tileList[num][0]).zfill(2)+'v'+str(tileList[num][1]).zfill(2)) for num in range(len(tileList))]
+    GIS.mosa(src+'MCD64A1.freq.', dst+'MCD64A1.freq.africa.tif')
+    GIS.mosa(src+'MCD64A1.reBurn.', dst+'MCD64A1.reBurn.africa.tif')
 
-    freq = gisRead(dst+'MCD64A1.freq.africa.tif')
+    freq = GIS.read(dst+'MCD64A1.freq.africa.tif')
     freq[freq==0] = np.nan
     reIn = 1/freq
     reIn[np.isnan(reIn)] = 17
 
-    gisWrite(reIn, 'temp.tif', dst+'MCD64A1.freq.africa.tif')
-    gisResamp('temp.tif', dst+'MCD64A1.interval.africa.tif', method='near')
+    GIS.write(reIn, 'temp.tif', dst+'MCD64A1.freq.africa.tif')
+    GIS.resamp('temp.tif', dst+'MCD64A1.interval.africa.tif', method='near')
 
 ####################################################################################################
 ##########pre-Process MOD44B: merge two fill values
 def treePrePro():
-    for num in range(len(tilelist)):
-        tile = 'h'+ str(tilelist[num][0]).zfill(2) + 'v' + str(tilelist[num][1]).zfill(2)
+    for num in range(len(tileList)):
+        tile = 'h'+ str(tileList[num][0]).zfill(2) + 'v' + str(tileList[num][1]).zfill(2)
         src = os.environ['DATA']+'/MODIS/MOD44B/raw/'+tile+'/'
         dst = os.environ['DATA']+'/MODIS/MOD44B/'+tile+'/'
         if not os.path.exists(dst):
@@ -392,7 +290,7 @@ def trmmRot(): #fix rotation problem
             dataset_out.FlushCache()
             dataset_out = None
 
-            gisResamp(monPreci, monPreci_afr) 
+            GIS.resamp(monPreci, monPreci_afr) 
 
 ####################################################################################################
 ##########Process TRMM data
@@ -416,55 +314,46 @@ def trmmProc():
         
         monlist += ['-'+string.ascii_uppercase[month-1]+' '+monPreci] #list of all MAP for gdalcal
         os.system('gdal_calc.py %s --outfile=%s --calc="%s"' %(imgstr, monPreci, methstr)) #MAP of one year
-        gisResamp(monPreci, monPreci_afr)
+        GIS.resamp(monPreci, monPreci_afr)
     imgstr = ' '.join(monlist)
     methstr = 'mean(array([' + ','.join(string.ascii_uppercase[l] for l in range(len(monlist))) + ']),axis=0)'
     os.system('gdal_calc.py %s --outfile=%s --calc="%s" --overwrite' %(imgstr, mMonPreci, methstr)) #multiyear MAP    
-    gisResamp(mMonPreci, mMonPreci_afr)
+    GIS.resamp(mMonPreci, mMonPreci_afr)
 
 ####################################################################################################
 def coverMask():
     src = os.environ['DATA'] + '/MODIS/MCD12Q1/'
     dst = os.environ['DATA'] + '/Africa/MCD12Q1/tile/'
     #water mask
-    for num in range(len(tilelist)):
-        tile = 'h'+str(tilelist[num][0]).zfill(2)+'v'+str(tilelist[num][1]).zfill(2)
+    for num in range(len(tileList)):
+        tile = 'h'+str(tileList[num][0]).zfill(2)+'v'+str(tileList[num][1]).zfill(2)
         infl =  src + tile + '/MCD12Q1.A2001001.' + tile + '.hdf'
         outfl = dst + 'MCD12Q1.mask.' + tile+'.tif'
         
-        cover = gisRead(infl)
+        cover = GIS.read(infl)
         coverMask = (cover == 0)|(cover == 16)
         coverMask[np.isnan(cover)] = gNoData
-        gisWrite(coverMask, outfl, infl, noData = gNoData, dtype=gdal.GDT_Int16)
-    gisMosa(dst+'MCD12Q1.mask.', os.environ['DATA'] + '/Africa/MCD12Q1.mask.tif')
+        GIS.write(coverMask, outfl, infl, noData = gNoData, dtype=gdal.GDT_Int16)
+    GIS.mosa(dst+'MCD12Q1.mask.', os.environ['DATA'] + '/Africa/MCD12Q1.mask.tif')
 
 ####################################################################################################
 def maskCalcu():
     africaPath = dataPath +'/Africa/'
     
-    #elev = gisResamp(dataPath + '/FAO/GloElev_30as.asc', africaPath+'/elev.africa.tif', resol = 'fine', sSrs = 'EPSG:4326')
+    #elev = GIS.resamp(dataPath + '/FAO/GloElev_30as.asc', africaPath+'/elev.africa.tif', resol = 'fine', sSrs = 'EPSG:4326')
     #elevMask = (elev>1200)|(elev<0)
-    #elevMask = gisWrite(elevMask, africaPath+'elevMask.africa.tif', africaPath+'elev.africa.tif')
+    #elevMask = GIS.write(elevMask, africaPath+'elevMask.africa.tif', africaPath+'elev.africa.tif')
     
-    cover = gisResamp(dataPath + '/GEM/GLC/glc2000_v1_1.tif', africaPath+'/GLC.africa.tif', resol = 'origin', sSrs = 'EPSG:4326')
+    cover = GIS.resamp(dataPath + '/GEM/GLC/glc2000_v1_1.tif', africaPath+'/GLC.africa.tif', resol = 'origin', sSrs = 'EPSG:4326')
     coverMask = cover==19
     #coverMask = (cover>=15)&(cover<=22)
     
-    gisWrite(coverMask, africaPath+'GLCMask.orgin.tif', africaPath+'GLC.africa.tif')
-    coverMask = gisResamp(africaPath+'GLCMask.orgin.tif', africaPath+'GLCMask.tif')
+    GIS.write(coverMask, africaPath+'GLCMask.orgin.tif', africaPath+'GLC.africa.tif')
+    coverMask = GIS.resamp(africaPath+'GLCMask.orgin.tif', africaPath+'GLCMask.tif')
 
     totalMask = np.zeros(coverMask.shape, dtype=np.int)
     totalMask[coverMask>0.1] = 1
     #totalMask[elevMask>0.1] = 2
     
-    totalMask = gisWrite(totalMask, africaPath + 'totalMask.tif', africaPath + 'GLCMask.tif', dtype=gdal.GDT_Int16)
+    totalMask = GIS.write(totalMask, africaPath + 'totalMask.tif', africaPath + 'GLCMask.tif', dtype=gdal.GDT_Int16)
 
-####################################################################################################
-#trmmProc()
-#fireMosa()
-#gisMosa('/data8/data/guol3/MODIS/MOD44B/MOD44B.','/data8/data/guol3/Africa/MOD44B.africa.tif')
-#gisResamp(scr + 'glds00ag', dst+'GPW.africa.tif')
-#burnArea()
-#for winLen in [5,7,9,12]:
-#    burnFrac(winLen)    
-#coverMask()
