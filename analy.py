@@ -1,4 +1,4 @@
-from configure import *
+from conf import *
 
 ####################################################################################################
 def reBin(a, shape):
@@ -9,10 +9,24 @@ def reBin(a, shape):
     return np.nanmean(a.reshape(sh), axis=-1).mean(1)
 
 ####################################################################################################
-def valiData(dataList, mask = None):
-    valiMask = np.ones(dataList[0].shape, dtype=np.bool)
-    for i in range(len(dataList)):
-        valiMask = valiMask & ~np.isnan(dataList[i])
+def cleaner(dataList, mask=None, nameList=None, nanCut=True):
+    """
+    Through away the NaNs in multiple dataset with the same size, and/or output to Panda DataFrame if *nameList* is provided.
+    
+    Args:
+        dataList: list or tuple. Input data arrays.
+        mask: matrix of bool, optional. Mask of valid data.
+        nameList: list of str, optional. List of columns names. Output to DataFrame if provided. Otherwise output is a list of arrays.
+        nanCut: bool, optinal. Through away NaNs.
+    
+    Return:
+        list (when *nameList* not provided) or DataFrame (when *nameList* is provided).
+    """
+    
+    if nanCut:
+        comMask = np.ones(dataList[0].shape, dtype=np.bool)
+        for i in range(len(dataList)):
+            comMask = comMask & ~np.isnan(dataList[i])
 
     if mask is not None:
         valiMask = valiMask & mask

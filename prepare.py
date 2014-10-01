@@ -1,5 +1,5 @@
-from .analy import*
-import .GIS
+from analy import*
+from . import GIS
 
 ####################################################################################################
 ### return iteration struture of datetime with given interval
@@ -120,10 +120,10 @@ def burnFracTile(tile, winLen = 9):
         
         outCoun[(~recMask)&outMask] += fire[(~recMask)&outMask]>0 #burnt outside of fire season
         endMask = (endMon==dp.month)&recMask #Mask to end and re-initialize.
-        annuAcu[endMask] += annuPre[endMask]>0 #Burnt pixels
+        annuAcu[endMask&(annuPre>0)] += 1 #Burnt pixels
+        rebCoun[endMask&(annuPre>1)] += 1 #re-Burnt pixels
         annuPre[endMask] = 0 #initialize present count to zero
         yeaCoun[endMask] += 1 #add one to year number
-        rebCoun[(annuPre>1)&endMask] += 1 #
         recMask[endMask] = False #recording ends
     
     noBurnMask = yeaCoun==0
