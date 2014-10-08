@@ -1,4 +1,6 @@
 from conf import*
+from osgeo import ogr
+from osgeo import osr
 
 ####################################################################################################
 def read(flnm):
@@ -88,3 +90,29 @@ def cordConv(xy_source, inproj, outproj):
     yy = xy_target[:,1].reshape(shape)
 
     return xx, yy
+
+####################################################################################################
+def concealer(top=90,bottom=-90,left=-180,right=180,WKG="WGS84"):
+ 
+# Create ring
+    ring = ogr.Geometry(ogr.wkbLinearRing)
+    ring.AddPoint(top, left)
+    ring.AddPoint(top, right)
+    ring.AddPoint(down, left)
+    ring.AddPoint(down, right)
+
+# Create polygon
+    poly = ogr.Geometry(ogr.wkbPolygon)
+    poly.AddGeometry(ring)
+
+    spatialReference = osgeo.osr.SpatialReference()
+    spatialReference.SetWellKnownGeogCS(WKG)
+
+    poly.AssignSpatialReference(spatialReference)
+    
+    outShapefile = outPath+str(top)+'_'+str(bottom)+'_'+str(left)+'_'+str(right)+".shp"
+    outDriver = ogr.GetDriverByName("ESRI Shapefile")
+
+    outDataSource = outDriver.CreateDataSource(outShapefile)
+    outLayer = outDataSource.CreateLayer("states_extent", geom_type=ogr.wkbPolygon)
+

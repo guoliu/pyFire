@@ -321,9 +321,9 @@ def trmmProc():
     GIS.resamp(mMonPreci, mMonPreci_afr)
 
 ####################################################################################################
-def coverMask():
-    src = os.environ['DATA'] + '/MODIS/MCD12Q1/'
-    dst = os.environ['DATA'] + '/Africa/MCD12Q1/tile/'
+def coverMask(thre=.1, maskNum=[0,16], northBound=None, southBound=None, westBound=None, eastBound=None):
+    src = dataPath + 'MODIS/MCD12Q1/'
+    dst = outPath+'MCD12Q1/tile/'
     #water mask
     for num in range(len(tileList)):
         tile = 'h'+str(tileList[num][0]).zfill(2)+'v'+str(tileList[num][1]).zfill(2)
@@ -331,10 +331,15 @@ def coverMask():
         outfl = dst + 'MCD12Q1.mask.' + tile+'.tif'
         
         cover = GIS.read(infl)
-        coverMask = (cover == 0)|(cover == 16)
+        coverMask = np.zeros(cover.shape, dtype=np.bool)
+        for i in len(maskNum):
+            coverMask = coverMask|(cover==maskNum[i])
         coverMask[np.isnan(cover)] = gNoData
         GIS.write(coverMask, outfl, infl, noData = gNoData, dtype=gdal.GDT_Int16)
-    GIS.mosa(dst+'MCD12Q1.mask.', os.environ['DATA'] + '/Africa/MCD12Q1.mask.tif')
+    GIS.mosa(dst+'MCD12Q1.mask.', outPath + 'MCD12Q1.maskAve.tif')
+    maskAve = GIS.read(outPath + 'MCD12Q1.maskAve.tif')
+    mask = maskAve>thre
+
 
 ####################################################################################################
 def maskCalcu():
@@ -357,3 +362,21 @@ def maskCalcu():
     
     totalMask = GIS.write(totalMask, africaPath + 'totalMask.tif', africaPath + 'GLCMask.tif', dtype=gdal.GDT_Int16)
 
+####################################################################################################
+def concealer()
+from osgeo import ogr
+
+# Create ring
+ring = ogr.Geometry(ogr.wkbLinearRing)
+ring.AddPoint(1179091.1646903288, 712782.8838459781)
+ring.AddPoint(1161053.0218226474, 667456.2684348812)
+ring.AddPoint(1214704.933941905, 641092.8288590391)
+ring.AddPoint(1228580.428455506, 682719.3123998424)
+ring.AddPoint(1218405.0658121984, 721108.1805541387)
+ring.AddPoint(1179091.1646903288, 712782.8838459781)
+
+# Create polygon
+poly = ogr.Geometry(ogr.wkbPolygon)
+poly.AddGeometry(ring)
+
+print poly.ExportToWkt()

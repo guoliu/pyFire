@@ -1,5 +1,6 @@
 from configure import*
 from . import GIS
+import pandas as pd
 
 ####################################################################################################
 ####################################################################################################
@@ -10,14 +11,34 @@ def reBin(a, shape):
     return np.nanmean(a.reshape(sh),axis=-1).mean(1)
 
 ####################################################################################################
-def crossMask(dataList, mask = None):
-    valiMask = np.ones(dataList[0].shape,dtype=np.bool)
-    for i in range(len(dataList)):
-        valiMask = valiMask&(~np.isnan(dataList[i]))
-    if mask is not None:
-        valiMask = valiMask&mask
+def cleaner(dataList, mask=None, nameList=None, nanCut=True):
+    """
+    Through away the NaNs in multiple dataset with the same size, and/or output to Panda DataFrame if *nameList* is provided.
+    
+    Args:
+        dataList: list or tuple. Input data arrays.
+        mask: matrix of bool, optional. Mask of invalid data.
+        nameList: list of str, optional. List of columns names. Output to DataFrame if provided. Otherwise output is a list of arrays.
+        nanCut: bool, optinal. Through away NaNs.
+    
+    Return:
+        list (when *nameList* not provided) or DataFrame (when *nameList* is provided).
+    """
 
-    return [dataList[i][valiMask] for i in range(len(dataList))]
+    comMask = np.ones(dataList[0].shape, dtype=np.bool)
+    if nanCut:
+        for i in range(len(dataList)):
+            comMask = comMask & (~np.isnan(dataList[i]))
+
+    if mask is not None:
+        comMask = comMask & (~mask)
+    
+    if nameList is not None:
+        if len(dataList)!=len(nameList):
+            print 'Cleaner: Wrong length for variable name.'
+        else:
+            return pd.DataFrame({nameList[i]: dataList[i][comMask] for i in range(len(dataList))})
+    return [ dataList[i][comMask] for i in range(len(dataList)) ]
 
 ####################################################################################################
 def arraySamp(array, size = 50):

@@ -1,17 +1,15 @@
-from configure import*
+from .conf import*
 from . import GIS
 from . import matr
+import seaborn as sns
 
 ####################################################################################################
-def mapDraw(flnm, fignm, titlTxt, projMap = None, scale = 1.0, log = False, maskNum = None, vMin=None, vMax=None, cmNm = 'Spectral_r', lut = None):
+def mapDraw(flnm, fignm, titlTxt, projMap = 'cea', scale = 1.0, log = False, maskNum = None, vMin=None, vMax=None, cmNm = 'Spectral_r', lut = None):
     print 'Plotting map from',flnm,'to', fignm
     from mpl_toolkits.basemap import Basemap
     from numpy import ma
     from matplotlib.colors import LogNorm
-    import  brewer2mpl
     
-    if projMap is None:
-        projMap = 'cea'
     # Read the data and metadata
     ds = gdal.Open(flnm)
 
@@ -177,6 +175,14 @@ def aver2D(x,y,z,xlabel,ylabel,zlabel,flnm):
 
 ####################################################################################################
 def scatter(xRaw, yRaw,  nmList, figNm, divider=None, text=None, percen=95, alpha=0.4, upp = True, med = True):    
+    """
+    Draw scatter plot in groups, and calculated upper percentile and median. Accept and ignore NaNs.
+
+    Args:
+        xRaw
+    
+    """
+    
     if text is None:
         titText, xText, yText = ''
     else: 
@@ -190,9 +196,8 @@ def scatter(xRaw, yRaw,  nmList, figNm, divider=None, text=None, percen=95, alph
         print 'Length of name list:', len(nmList)
         return
 
-    xRaw, yRaw, divider = matr.crossMask([xRaw, yRaw, divider])
+    xRaw, yRaw, divider = matr.cleaner([xRaw, yRaw, divider])
     almost_black = '#262626'
-    #mpl.use('PDF')
     import matplotlib.pyplot as plt, brewer2mpl
     
     clm = brewer2mpl.get_map('Set3', 'qualitative', 8, reverse=True).mpl_colors
@@ -238,4 +243,56 @@ def treeFireHis(noFireMaskRaw, fireMaskRaw, tree, preci):
     plt.legend(loc='upper center')
     fig.savefig('treeFireHis.pdf', dpi = 300)
     plt.close()
+
+####################################################################################################
+def explorer(data, name, hue=None):
+    """        
+    Draw and save Trellis plots including scatter plots (upper triangle) and kernal density (lower triangle and lower triangle), correlation map with person R and p value. Takes long time with big data.
+    
+    Args:
+        data: dataFrame. Input data arrays.
+        name: str. Name of output figure file. 
+        hue: str, optional. Name of variable used as hue. 
+    Return:
+        PairGrid
+    """
+
+    if name[-4:]=='.pdf': 
+        mpl.use('PDF')
+    import matplotlib.pyplot as plt
+    sns.set(style="white")
+    g = sns.PairGrid(data, hue=hue)
+    g.map_lower(sns.kdeplot, cmap="PuBu",shade=True)
+    g.map_diag(sns.kdeplot, lw=3, legend=False, shade=True)
+    g.map_upper(plt.scatter, s=10, alpha=.05)
+    
+    g.savefig('trel_'+name, dpi=300)
+    #plt.show()
+
+    ax = sns.corrplot(data)
+    plt.savefig('corr_'+name, dpi = 300)
+
+    return g
+
+####################################################################################################
+def bivar(data, var1, var2, name):
+    """        
+    Draw and save bivariant data, with linear regression and distribution.
+
+    Args:
+        data: dataFrame. Input data arrays.
+        var1: str. Varibale name in data, plotted on x-axis.
+        var2: str. Varibale name in data, plotted on y-axis.
+        name: str. Name of output figure file. 
+    Return:
+        PairGrid
+    """
+    
+    g = sns.JointGrid(var1, var2, data)
+    g.plot_marginals(sns.distplot, color="seagreen")
+    g.plot_joint(plt.scatter, color=".5", edgecolor="white", s=8, alpha=.06)
+    g.annotate(stats.spearmanr)
+    g.savefig(name, dpi=300)
+    return g
+
 
