@@ -3,11 +3,12 @@ from osgeo import ogr
 from osgeo import osr
 
 ####################################################################################################
-def read(flnm):
+def read(flnm, num=1):
+    print 'Reading', flnm
     g = gdal.Open(flnm, gdal.GA_ReadOnly)
-    band = g.GetRasterBand(1)
+    band = g.GetRasterBand(num)
     if band is None:
-        subdataset = gdal.Open(g.GetSubDatasets()[0][0], gdal.GA_ReadOnly)
+        subdataset = gdal.Open(g.GetSubDatasets()[num-1][0], gdal.GA_ReadOnly)
         band = subdataset.GetRasterBand(1)
 
     data = band.ReadAsArray()
@@ -18,28 +19,49 @@ def read(flnm):
     #    mask = g.GetRasterBand(2)
     #    maskData = mask.ReadAsArray()==255
     #    data[~maskData] = np.nan
+    g = None
     return data
 
 ####################################################################################################
-def resamp(infile, outfile, method = 'average', noData = -9999, resol = 'coarse', sSrs = ''):
-    if sSrs is not '':
-        sSrs = ' -s_srs ' + sSrs
+def resamp(inFile, outFile, method = 'average', noData = gNoData, resol = 'coarse', sSrs = '', tSrs='$DATA/MODIS.prf'):
+    """        
+    Resample raster data, and crop to cutline. 
 
-    if resol == 'coarse':
-        os.system('gdalwarp -ot Float32 -wt Float32 -overwrite%s -t_srs $DATA/MODIS.prf -cutline $DATA/Africa/Africa.shp -crop_to_cutline -dstnodata %s -r %s -tr 27829.75 27829.75 %s %s' %(sSrs, str(noData), method, infile, outfile))
+    Args:
+        inFile: Input raster file name.
+        outFile: Output raster file name.
+        method: average (default), near, bilinear, cubic, cubicspline, lanczos, mode.
+    """
+    #EPSG:4326
+    print 'Resampling', inFile
+    if tSrs!='$DATA/MODIS.prf' and resol!='origin':
+        print 'Only original resolution is supported for non-Sinusoidal projection. Falling back to "origin".'
+        resol='origin'
+
+    if sSrs!='':
+        sSrs='-s_srs '+sSrs
+    if tSrs!='':
+        tSrs='-t_srs '+tSrs
+
+    if resol=='coarse': 
+        tRes='-tr 27829.75 27829'
     elif resol == 'fine':
-        os.system('gdalwarp -ot Float32 -wt Float32 -overwrite%s -t_srs $DATA/MODIS.prf -cutline $DATA/Africa/Africa.shp -crop_to_cutline -dstnodata %s -r %s -tr 5565.95 5565.95 %s %s' %(sSrs, str(noData), method, infile, outfile))
+        #tRes='-tr 5565.95 5565.95'
+        tRes='-tr 2782.975 2782.9'
     elif resol == 'origin':
-        os.system('gdalwarp -overwrite%s -t_srs $DATA/MODIS.prf -cutline $DATA/Africa/Africa.shp -crop_to_cutline -dstnodata %s -r %s %s %s' %(sSrs, str(noData), method, infile, outfile))
+        tRes=''
     else: 
-        print 'Unsupported resulotion: ', resol
+        print 'Unsupported resulotion:', resol
         return
+    
+    #print 'gdalwarp -ot Float32 -wt Float32 -overwrite %s %s -cutline $DATA/Africa/Africa.shp -crop_to_cutline -dstnodata %s -r %s %s %s %s' %(sSrs, tSrs, str(noData), method, tRes, inFile, outFile)
+    os.system('gdalwarp -ot Float32 -wt Float32 -overwrite %s %s -cutline $DATA/Africa/Africa.shp -crop_to_cutline -dstnodata %s -r %s %s %s %s' %(sSrs, tSrs, str(noData), method, tRes, inFile, outFile))
 
-    #return read(outfile)
+    return
 
 ####################################################################################################
-def write(indata, outfile, template, noData = gNoData, drivernm = 'GTiff', dtype=gdal.GDT_Float32):
-    print 'Writing data to ', outfile 
+def write(indata, outFile, template, noData = gNoData, drivernm = 'GTiff', dtype=gdal.GDT_Float32):
+    print 'Writing data to ', outFile 
     G = gdal.Open(template, gdal.GA_ReadOnly) #open data                    
     try:
         g = gdal.Open(G.GetSubDatasets()[0][0], gdal.GA_ReadOnly)
@@ -51,19 +73,26 @@ def write(indata, outfile, template, noData = gNoData, drivernm = 'GTiff', dtype
     srs = g.GetProjectionRef() # Projection
 
     driver = gdal.GetDriverByName (drivernm)
-    dataset_out = driver.Create (outfile, x_size, y_size, 1, dtype)
+    dataset_out = driver.Create (outFile, x_size, y_size, 1, dtype)
     dataset_out.SetGeoTransform ( geo_transform )
     dataset_out.SetProjection ( srs )
     raster_out = dataset_out.GetRasterBand ( 1 )
     
-    indata[np.isnan(indata)] = noData
+    nanMask = np.isnan(indata)
+    indata[nanMask] = noData
     raster_out.WriteArray (indata)
     raster_out.SetNoDataValue(noData)
     dataset_out.FlushCache()
     dataset_out = None
     
-    #resamp('temp.tif', outfile, method = method)
-    #return read(outfile)
+    try:
+        indata[nanMask] = np.nan
+    except: 
+        pass
+
+    return
+    #resamp('temp.tif', outFile, method = method)
+    #return read(outFile)
 
 ####################################################################################################
 ### combine and resample tiles to GeoTiff with a given product name and date
@@ -72,7 +101,7 @@ def mosa(oldPref, newFile, method='average', oldSuff='.tif'):
     tilestr = ' '.join(nmlist)
     
     resamp(tilestr, newFile, method=method)
-    return read(newFile)
+    return
 
 ####################################################################################################
 def cordConv(xy_source, inproj, outproj):
@@ -92,27 +121,62 @@ def cordConv(xy_source, inproj, outproj):
     return xx, yy
 
 ####################################################################################################
-def concealer(top=90,bottom=-90,left=-180,right=180,WKG="WGS84"):
- 
-# Create ring
-    ring = ogr.Geometry(ogr.wkbLinearRing)
-    ring.AddPoint(top, left)
-    ring.AddPoint(top, right)
-    ring.AddPoint(down, left)
-    ring.AddPoint(down, right)
-
-# Create polygon
-    poly = ogr.Geometry(ogr.wkbPolygon)
-    poly.AddGeometry(ring)
-
-    spatialReference = osgeo.osr.SpatialReference()
-    spatialReference.SetWellKnownGeogCS(WKG)
-
-    poly.AssignSpatialReference(spatialReference)
+def area(longiDeg, latiDeg, resoDeg):
+    R = 6371.0087714 #km. Arithmetic mean radius of Earth in WGS84
     
-    outShapefile = outPath+str(top)+'_'+str(bottom)+'_'+str(left)+'_'+str(right)+".shp"
-    outDriver = ogr.GetDriverByName("ESRI Shapefile")
+    if len(resoDeg)==1:
+        resoDeg = [resoDeg,resoDeg]
 
-    outDataSource = outDriver.CreateDataSource(outShapefile)
-    outLayer = outDataSource.CreateLayer("states_extent", geom_type=ogr.wkbPolygon)
+    reOrg = lambda x, lim: np.array([x[0],x[1]+lim]) if x[1]<x[0] else np.array(x)
+    longiDeg = reOrg(longiDeg, 180) #circula longitude
+    latiDeg = reOrg(latiDeg, 0) #normal latitude
 
+    tran = lambda x: x.astype(np.float64)*np.pi/180.0 #degree to radius    
+    longi = tran(longiDeg) #longitude extend in radius
+    lati = tran(latiDeg) #latitude extend in radius
+    reso = tran(np.array(resoDeg))
+
+    d = lambda x, r: (np.arange(x[0],x[1]-r*1e-2,r), np.append(np.arange(x[0]+r,x[1],r),x[1]))
+
+    xLefVe, xRitVe = (x%180 for x in d(longi, reso[0])) #x vectors; round earth
+    yButVe, yTopVe = d(lati, reso[1]) #y vectors
+
+    xLef, yBut = np.meshgrid(xLefVe, yButVe) #buttom-left grids
+    xRit, yTop = np.meshgrid(xRitVe, yTopVe) #top-right grids
+
+    A = R**2*(xRit-xLef)*(np.sin(yTop)-np.sin(yBut))
+    return A
+
+####################################################################################################
+def areaDiv(inFile, outFile):
+    ds = gdal.Open(inFile)
+    gt = ds.GetGeoTransform()
+
+    xres = gt[1]
+    yres = gt[5]
+
+    # get the edge coordinates and add half the resolution 
+    # to go to center coordinates
+    xmin = gt[0]
+    xmax = gt[0] + (xres * ds.RasterXSize)
+    ymin = gt[3] + (yres * ds.RasterYSize)
+    ymax = gt[3]
+
+    data=read(inFile)
+    gridArea=area([xmin, xmax], [ymin, ymax], [xres,-yres])
+    
+    write(gridArea, outPath+'gridArea.tif', inFile)
+    write(data/gridArea, outFile, inFile)
+
+####################################################################################################
+def reMap(xUpp, yUpp, xBas, template = None, flnm = None):
+    xMask = ~np.isnan(xBas)
+    
+    yPo = np.empty(xBas.shape)
+    yPo[:] = np.nan
+    yPo[xMask] = np.interp(xBas[xMask], xUpp, yUpp)
+    
+    if template is not None and flnm is not None:
+        write(yPo, flnm, template)
+
+    return yPo

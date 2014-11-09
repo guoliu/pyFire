@@ -1,1 +1,1 @@
-__all__ = ["matr", "GIS", "plot"]
+__all__ = ["matr", "GIS", "plot","mix"]

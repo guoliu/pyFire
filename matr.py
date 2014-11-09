@@ -1,5 +1,4 @@
-from configure import*
-from . import GIS
+from conf import*
 import pandas as pd
 
 ####################################################################################################
@@ -11,7 +10,7 @@ def reBin(a, shape):
     return np.nanmean(a.reshape(sh),axis=-1).mean(1)
 
 ####################################################################################################
-def cleaner(dataList, mask=None, nameList=None, nanCut=True):
+def cleaner(dataList, mask=None, nameList=None, NaNCut=True, scalingPoint=None):
     """
     Through away the NaNs in multiple dataset with the same size, and/or output to Panda DataFrame if *nameList* is provided.
     
@@ -24,21 +23,37 @@ def cleaner(dataList, mask=None, nameList=None, nanCut=True):
     Return:
         list (when *nameList* not provided) or DataFrame (when *nameList* is provided).
     """
-
-    comMask = np.ones(dataList[0].shape, dtype=np.bool)
-    if nanCut:
-        for i in range(len(dataList)):
+##########Calculate common mask and standard scale    
+    if NaNCut:
+        comMask = ~np.isnan(dataList[0])    
+        for i in range(1,len(dataList)):
             comMask = comMask & (~np.isnan(dataList[i]))
-
-    if mask is not None:
-        comMask = comMask & (~mask)
     
-    if nameList is not None:
+    if scalingPoint is not None:
+        percenF = lambda x: np.percentile(x[~np.isnan(x)], scalingPoint) #calculate percentile
+        percenList = [percenF(dataList[i]) for i in range(len(dataList))]
+        standard = np.max(percenList)
+        print 'Scaling standard:', scalingPoint, 'percentile =', standard
+        for i in range(len(dataList)):
+            dataList[i] = dataList[i]*standard/percenList[i]
+
+##########Apply additional mask if needed
+    if mask is not None:
+        if NaNCut:
+            comMask = comMask & (~mask)
+        else:
+            for i in range(len(dataList)):
+                dataList[i][mask] = np.nan 
+
+    if nameList is not None: #return pandas dataFrame
         if len(dataList)!=len(nameList):
             print 'Cleaner: Wrong length for variable name.'
         else:
             return pd.DataFrame({nameList[i]: dataList[i][comMask] for i in range(len(dataList))})
-    return [ dataList[i][comMask] for i in range(len(dataList)) ]
+    elif NaNCut: #return list of 1-d arrays
+        return [ dataList[i][comMask] for i in range(len(dataList)) ]
+    else: #return list of origional shape arrays
+        return dataList
 
 ####################################################################################################
 def arraySamp(array, size = 50):
@@ -63,7 +78,7 @@ def maskSamp(mask, contr, minEdge = None, maxEdge = None, inter = 100, size = 50
     for edge in range(minEdge, maxEdge, inter):
         temMa = arraySamp((contr<=edge+inter)&(contr>=edge)&mask, size = size)
         if temMa is None:
-            print 'Reduce sample size at edge: ', edge
+            print str(edge)+' to '+str(edge+inter)
             return None
         new_mask = new_mask|temMa    
     return new_mask
@@ -89,7 +104,7 @@ def binPer(x, y , nbin = None, percen = 90, med = True):
     
     xOrd = stats.rankdata(x,method='dense')
     if nbin is None:
-        nbin = np.max((xOrd.max()//100, 5))
+        nbin = np.max((xOrd.max()//150, 5))
         print 'Automatic bin number:', nbin
     else:
         print 'User assigned bin number:', nbin
@@ -105,16 +120,19 @@ def binPer(x, y , nbin = None, percen = 90, med = True):
         return xNew, yNew
 
 ####################################################################################################
-def reMap(xUpp, yUpp, xBas, template = None, flnm = None):
-    xMask = ~np.isnan(xBas)
-    
-    yPo = np.empty(xBas.shape)
-    yPo[:] = np.nan
-    yPo[xMask] = np.interp(xBas[xMask], xUpp, yUpp)
-
-    if template is not None and flnm is not None:
-        GIS.write(yPo, flnm, template)
-
-    return yPo
-
-
+def autoBin(data, nBin, log=False):
+    nanMask = ~np.isnan(data)
+    nData = nanMask.flatten().sum()
+    widBin = nData//nBin
+    dataSort = np.sort(data[nanMask])
+    if log:
+        dataSort[dataSort==0] = dataSort.min()/2.0
+        dataSort = np.log(dataSort)
+    bound = dataSort[0::widBin]
+    if len(bound)<nBin+1:
+        bound = np.append(bound, dataSort[-1])
+    else:
+        bound[-1] = dataSort[-1]
+    if log:
+        bound = np.exp(bound)
+    return bound

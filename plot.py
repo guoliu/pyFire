@@ -4,7 +4,7 @@ from . import matr
 import seaborn as sns
 
 ####################################################################################################
-def mapDraw(flnm, fignm, titlTxt, projMap = 'cea', scale = 1.0, log = False, maskNum = None, vMin=None, vMax=None, cmNm = 'Spectral_r', lut = None):
+def mapDraw(flnm, fignm, titlTxt, projMap = 'cea', scale = 1.0, log = False, maskNum = None, vMin=None, vMax=None, cmNm = 'gist_ncar_r', lut = None):
     print 'Plotting map from',flnm,'to', fignm
     from mpl_toolkits.basemap import Basemap
     from numpy import ma
@@ -64,12 +64,17 @@ def mapDraw(flnm, fignm, titlTxt, projMap = 'cea', scale = 1.0, log = False, mas
         if vMax is None:
             vMax = 10**np.ceil(np.log10(np.nanmax(data))) 
         im = m.pcolormesh(xx, yy, ma.array(data.T,mask=np.isnan(data.T)), cmap=colmap, norm=LogNorm(vmin=vMin, vmax=vMax))
-    else: 
+    else:
+        if vMin is None:
+            vMin = np.min(data[np.isfinite(data)])
+        if vMax is None:
+            vMax = np.max(data[np.isfinite(data)])
         im = m.pcolormesh(xx, yy, ma.array(data.T,mask=np.isnan(data.T)), cmap=colmap, vmin=vMin, vmax=vMax)
     fig.colorbar(im, format='$%.2f$')
     plt.title(titlTxt, fontsize=16)
     
     plt.savefig(fignm, dpi = 400)
+    plt.close()
 
 ####################################################################################################
 def axAdj(ax):
@@ -105,15 +110,16 @@ def axAdj(ax):
     
     light_grey = np.array([float(248)/float(255)]*3)
     legend = ax.legend(frameon=True, scatterpoints=1, fontsize=10, loc='best')#, bbox_to_anchor=(1, 0.5))
-    rect = legend.get_frame()
-    rect.set_facecolor(light_grey)
-    rect.set_alpha(0.9)
-    rect.set_linewidth(0.0)
+    if legend:
+        rect = legend.get_frame()
+        rect.set_facecolor(light_grey)
+        rect.set_alpha(0.9)
+        rect.set_linewidth(0.0)
     
     # Change the legend label colors to almost black, too
-    texts = legend.texts
-    for t in texts:
-        t.set_color(almost_black)
+        texts = legend.texts
+        for t in texts:
+            t.set_color(almost_black)
 
 ####################################################################################################
 ####################################################################################################
@@ -225,27 +231,52 @@ def scatter(xRaw, yRaw,  nmList, figNm, divider=None, text=None, percen=95, alph
 
 ####################################################################################################
 ####################################################################################################
-def treeFireHis(noFireMaskRaw, fireMaskRaw, tree, preci):
-    nbin = 10
-    sampSize = 7
+def fireTreePDF(fire, valiMask, tree, preci, cutList = None, preciEdge = [1000,2000], suff='.pdf', nbin = 15, sampSize = 2, sampTime = 300):
+    #noFireMaskRaw, fireMaskRaw,
+    valiMask = valiMask&(~np.isnan(tree))
+    print 'Total number: '+str(valiMask.sum())
 
-    noFireMask = maskSamp(noFireMaskRaw, preci, minEdge = 1000, maxEdge = 2000, size=sampSize)
-    fireMask = maskSamp(fireMaskRaw, preci, minEdge = 1000, maxEdge = 2000, size=sampSize)
+    if cutList is None:
+        cutList = matr.autoBin(fire[~np.isnan(tree)], 5)
+        print 'fireTreePDF: Auto bin boundaries: ',cutList
 
-    mpl.use('PDF')
+    SingSamp = lambda x: matr.maskSamp(x, preci, minEdge = preciEdge[0], maxEdge = preciEdge[1],  inter = 100, size=sampSize) #do sample for one time 
+    MultiSamp = lambda mask: np.hstack(tree[SingSamp(mask)] for _ in range(sampTime))
+
+    if suff[-4:]=='.pdf':
+        mpl.use('PDF')
+
     import matplotlib.pyplot as plt    
     fig, ax = plt.subplots(1)
-    plt.hist(tree[noFireMask],histtype='stepfilled',color='k',alpha=0.5, bins=nbin, label='Unburnt')#, normed=True)
-    plt.hist(tree[fireMask],histtype='stepfilled',color='r',alpha=0.3, bins=nbin, label='Burnt')#, normed=True)
-    plt.ylabel('Pixel Number',  fontsize=14)
+    for i in range(len(cutList)-1):
+        labelTxt = 'Burning Fraction {:.3f}'.format(cutList[i])+' - {:.3f}'.format(cutList[i+1])
+        print labelTxt
+        mask = (fire>cutList[i])&(fire<=cutList[i+1])&valiMask
+        print 'Temporal fire number: '+str(((fire>cutList[i])&(fire<cutList[i+1])).sum())
+        print 'Temporal number: '+str(mask.sum())
+        plt.hist(MultiSamp(mask), histtype='stepfilled', color=plt.cm.jet(i/(len(cutList)-1.0)), alpha=0.3, edgecolor='k', bins=nbin, label=labelTxt, normed=True)
+    plt.ylabel('Probability',  fontsize=14)
     plt.xlabel('Percentage Tree Cover',  fontsize=14)
     plt.title('Tree Cover for Burnt and Unburnt Pixels', fontsize=16)
     plt.legend(loc='upper center')
-    fig.savefig('treeFireHis.pdf', dpi = 300)
+    fig.savefig('fireTreePDF'+str(preciEdge[0])+'to'+str(preciEdge[1])+suff, dpi = 300)
     plt.close()
 
 ####################################################################################################
-def explorer(data, name, hue=None):
+def treeCompare():
+    tempPath = outPath+'LandTypeScore/'
+    treeDict = {'treeMOD44': outPath + 'MOD44B.tif', 'treeMCD12PFT': outPath+'LandTypeScore/MCD12PFTForestScore.tif', 'treeMCD12IGBP': outPath+'LandTypeScore/MCD12IGBPForestScore.tif', 'treeGLC': outPath+'LandTypeScore/GLCForestScore.tif'}
+    dataList = matr.cleaner([GIS.read(treeDict[dataName]) for dataName in treeDict], NaNCut=False, scalingPoint=95)
+    
+    i = 0
+    for dataName in treeDict:
+        flnm = tempPath+dataName+'Rescale.tif'
+        GIS.write(dataList[i], flnm, treeDict[dataName])
+        mapDraw(flnm, tempPath+dataName+'Rescale.png', dataName+' (rescaled)')
+        i += 1
+
+####################################################################################################
+def explorer(data, name, hue=None, trel=True, corr=True):
     """        
     Draw and save Trellis plots including scatter plots (upper triangle) and kernal density (lower triangle and lower triangle), correlation map with person R and p value. Takes long time with big data.
     
@@ -260,39 +291,110 @@ def explorer(data, name, hue=None):
     if name[-4:]=='.pdf': 
         mpl.use('PDF')
     import matplotlib.pyplot as plt
-    sns.set(style="white")
-    g = sns.PairGrid(data, hue=hue)
-    g.map_lower(sns.kdeplot, cmap="PuBu",shade=True)
-    g.map_diag(sns.kdeplot, lw=3, legend=False, shade=True)
-    g.map_upper(plt.scatter, s=10, alpha=.05)
+    #sns.set_context("talk", font_scale=1.3)
+    if trel:
+        print 'Plotting Trellis plots.'
+        #sns.set(style="white")
+        #f, ax = plt.subplots(figsize=(7, 7))
+        #ax.set(xscale="log", yscale="log")
+        g = sns.PairGrid(data, hue=hue)
+        g.map_lower(sns.kdeplot, cmap="Purples",shade=True)
+        g.map_diag(plt.hist)
+        g.map_upper(plt.scatter, s=10, alpha=.05)
     
-    g.savefig('trel_'+name, dpi=300)
-    #plt.show()
+        g.savefig('trel_'+name, dpi=300)
+        plt.close()
 
-    ax = sns.corrplot(data)
-    plt.savefig('corr_'+name, dpi = 300)
-
-    return g
-
+    if corr:
+        print 'Plotting correlation map.'
+        #sns.set_context(rc={"figure.figsize": (16, 16)})
+        plt.figure()
+        ax = sns.corrplot(data)
+        ax.figure.savefig('corr_'+name, dpi = 300)
+        plt.close()    
+    
+    
 ####################################################################################################
-def bivar(data, var1, var2, name):
+def bivar(data, name, var1=None, var2=None):
     """        
     Draw and save bivariant data, with linear regression and distribution.
 
     Args:
         data: dataFrame. Input data arrays.
-        var1: str. Varibale name in data, plotted on x-axis.
-        var2: str. Varibale name in data, plotted on y-axis.
-        name: str. Name of output figure file. 
+        var1: str or list. Varibale name in data, plotted on x-axis. Use all varibale in data if not set.
+        var2: str or list. Varibale name in data, plotted on y-axis. Use all varibale in data if not set.
+        name: str. Name (suffix) of output figure file. 
     Return:
         PairGrid
     """
+
+    from scipy import stats
+
+    if name[-4:]=='.pdf': 
+        mpl.use('PDF')
+    import matplotlib.pyplot as plt
     
-    g = sns.JointGrid(var1, var2, data)
-    g.plot_marginals(sns.distplot, color="seagreen")
-    g.plot_joint(plt.scatter, color=".5", edgecolor="white", s=8, alpha=.06)
-    g.annotate(stats.spearmanr)
-    g.savefig(name, dpi=300)
-    return g
+    def organize(var):
+        if type(var) is str:
+            var = [var]
+        if var is None:
+            var = data.columns
+        return var
+    var1 = organize(var1)
+    var2 = organize(var2)
+ 
+    for i in range(len(var1)):
+        var1s = var1[i]
+        for var2s in var2[i:]:
+            if var1s==var2s:
+                continue
+            print 'Plotting relationship between', var1s, 'and', var2s 
+            g = sns.JointGrid(var1s, var2s, data)
+            g.plot_marginals(sns.distplot, color="seagreen")
+            g.plot_joint(sns.regplot, color=".5", scatter_kws={'edgecolor':'white', 's':8, 'alpha':.4})
+            g.annotate(stats.pearsonr)
+            plt.savefig(var1s+'_'+var2s+'_'+name, dpi=300)
+            plt.close()
 
+####################################################################################################
+def LarsPlot(X, y, figNm, alpha=1, titleTxt=''):    
+    """
+    Draw scatter plot and regression line computed by Lasso model fit with Least Angle Regression.
 
+    Args:
+        X
+        y
+        alpha
+    
+    """
+    from sklearn import linear_model
+    clf = linear_model.LassoLars(fit_path=False, alpha=alpha)
+    clf.fit(X,y)
+    coef = clf.coef_
+    inter = clf.intercept_
+    Rsq = clf.score(X, y)
+    pred = clf.predict(X)
+    print 'Coefficient:', coef
+    print 'Interception:', inter
+    print 'R square:', Rsq
+
+    almost_black = '#262626'
+    import matplotlib.pyplot as plt, brewer2mpl
+    
+    clm = brewer2mpl.get_map('Set3', 'qualitative', 8, reverse=True).mpl_colors
+    
+    fig, ax = plt.subplots(1)
+    print 'Plotting', figNm
+    color = clm[1]
+    ax.scatter(pred, y, alpha=0.1, edgecolor=almost_black, facecolor=color, linewidth=0.15)
+    
+    limMin = np.min([pred.min(),y.min()])
+    limMax = np.max([pred.max(),y.max()])
+    ax.plot([limMin,limMax], [limMin,limMax], color='black', linewidth=0.7, alpha=0.6)
+    axAdj(ax)
+    ax.set_title(titleTxt+r'. $\alpha=$'+str(alpha)+r'$, R^2=$ %0.2f' % (Rsq,))
+    ax.set_xlabel('Prediction', fontsize=14)
+    ax.set_ylabel('Observation', fontsize=14)
+    ax.set_xlim([limMin,limMax])
+    ax.set_ylim([limMin,limMax])  
+    fig.savefig(figNm, dpi=300)

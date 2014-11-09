@@ -1,5 +1,5 @@
-from analy import*
-from . import GIS
+from conf import*
+from . import matr, GIS, plot
 
 ####################################################################################################
 ### return iteration struture of datetime with given interval
@@ -13,7 +13,7 @@ def timerange(startY, endY, inter):
         return (datetime.date(y, 1, 1) for y in range(startY, endY))
     print 'Unsupported interval type'
 
-
+####################################################################################################
 def timeAver(oldPref, oldSuff, newFile, inter, method='average', start = startY, end = endY, dtype=gdal.GDT_Float32):
        
     nmlist = [oldPref + dp.strftime('%Y') + dp.strftime('%j') + oldSuff for dp in timerange(start, end, inter) if os.path.isfile(oldPref + dp.strftime('%Y') + dp.strftime('%j') + oldSuff)]
@@ -150,6 +150,12 @@ def burnFrac(winLen = 9):
     GIS.mosa(os.environ['DATA'] + '/MODIS/MCD64A1/annual/MCD64A1.outCounWin'+str(winLen).zfill(2)+'.', outPath+'MCD64A1.outCounWin'+str(winLen).zfill(2)+'.tif')
     GIS.mosa(os.environ['DATA'] + '/MODIS/MCD64A1/annual/MCD64A1.burnFracWin'+str(winLen).zfill(2)+'.', outPath+'MCD64A1.burnFracWin'+str(winLen).zfill(2)+'.tif')
 
+    if not os.path.isfile(outPath+'peakFire.tif'):
+        GIS.mosa(dataPath+'/MODIS/MCD64A1/annual/MCD64A1.peakMonth.',outPath+'peakFire.tif',method='mode')
+        plot.mapDraw(outPath+'peakFire.tif', 'peakFire.png','Fire Peak Month',vMin=1, vMax=12, lut=12)
+        os.system('gdal_fillnodata.py %s %s' %(outPath+"peakFire.tif",outPath+"peakFireFill.tif"))
+        plot.mapDraw(outPath+"peakFireFill.tif", 'peakFireFill.png','Fire Peak Month Fill',vMin=1, vMax=12, lut=12)
+
 ####################################################################################################
 def burnArea():
     ## Count the burnt frequency on annual-resolution
@@ -214,6 +220,25 @@ def treePrePro():
                 namestr = gdal.Open(flnm,gdal.GA_ReadOnly).GetSubDatasets()[0][0]
                 outfile = dst + 'MOD44B.A' + date.strftime('%Y') + date.strftime('%j') + '.' + tile + '.hdf'
                 os.system('gdal_calc.py -A %s --outfile=%s --calc="255*((A==200)|(A==253))+A*((A!=200)|(A!=253))" --NoDataValue=255 --overwrite' %(namestr, outfile))
+
+####################################################################################################
+def treeCha():
+    '''
+    Tree Cover annual change.
+    '''
+    src = dataPath+'MODIS/MOD44B/'
+    for year in range(2000,2011):
+        GIS.resamp(outPath+'MOD44B/MOD44B.A'+str(year)+'.tif', outPath+'MOD44B/MOD44B.'+str(year)+'.tif', method='near')
+
+    treeTotal = np.dstack(GIS.read(outPath+'MOD44B/MOD44B.'+str(year)+'.tif') for year in range(2000,2011))
+    treeChaDa = np.nanmean(treeTotal[:,:,1:]-treeTotal[:,:,0:-1], axis=2)
+    del treeTotal
+    GIS.write(treeChaDa, outPath+'treeCha.tif', outPath+'MOD44B/MOD44B.2000.tif')
+    
+    plot.mapDraw(outPath+'treeCha.tif','treeCha.png', 'Annual Increase of Treecover (%/year)', maskNum=0, vMin=np.nanmin(treeChaDa)*.7, vMax=np.nanmax(treeChaDa)*.7)
+
+####################################################################################################
+
 
 ####################################################################################################
 def fire_16day(tile):
@@ -294,7 +319,7 @@ def trmmRot(): #fix rotation problem
 
 ####################################################################################################
 ##########Process TRMM data
-def trmmProc():
+def TRMM():
     import string
     src = os.environ['DATA']+'/TRMM/'
     dst = os.environ['DATA']+'/Africa/TRMM/'
@@ -321,7 +346,40 @@ def trmmProc():
     GIS.resamp(mMonPreci, mMonPreci_afr)
 
 ####################################################################################################
-def coverMask(thre=.1, maskNum=[0,16], northBound=None, southBound=None, westBound=None, eastBound=None):
+def DI(MAPThre=100): 
+    preci = np.dstack(GIS.read(outPath+'TRMM/3B43.'+str(month).zfill(2)+'.tif') for month in range(1,13))
+    DM = np.sum((preci<MAPThre)*1.0, axis=2)
+    DM[DM==0] = np.nan
+    PPT = np.sum((preci<MAPThre)*preci,axis=2)/DM
+    DI = (DM/12*(1-PPT/100))**.5    
+    GIS.write(DI, outPath+'DI.tif',outPath+'TRMM/3B43.01.tif')
+    plot.mapDraw(outPath+'DI.tif','DI.png','Drought Imndex')
+
+####################################################################################################
+def MCD12(year=2001):  
+    TileList = ['h'+str(h).zfill(2)+'v'+str(v).zfill(2) for h in range(36) for v in range(18)]
+    FileList = [dataPath+'MODIS/MCD12Q1/'+tile+'/MCD12Q1.A'+str(year)+'001.'+tile+'.hdf' for tile in TileList]
+    if not os.path.isfile(dataPath+'MODIS/MCD12Q1/MCD12IGBP'+str(year)+'.vrt'):
+        IGBPList = [gdal.Open(flnm, gdal.GA_ReadOnly).GetSubDatasets()[0][0] for flnm in FileList if os.path.isfile(flnm)]
+        os.system('gdalbuildvrt %s %s' %(dataPath+'MODIS/MCD12Q1/MCD12IGBP'+str(year)+'.vrt', ' '.join(IGBPList)))
+    if not os.path.isfile(dataPath+'MODIS/MCD12Q1/MCD12PFT'+str(year)+'.vrt'):
+        PFTList = [gdal.Open(flnm, gdal.GA_ReadOnly).GetSubDatasets()[4][0] for flnm in FileList if os.path.isfile(flnm)]
+        os.system('gdalbuildvrt %s %s' %(dataPath+'MODIS/MCD12Q1/MCD12PFT'+str(year)+'.vrt', ' '.join(PFTList)))
+    
+    AfrTileList = ['h'+str(hv[0]).zfill(2)+'v'+str(hv[1]).zfill(2) for hv in tileList]
+    AfrFileList = [dataPath+'MODIS/MCD12Q1/'+tile+'/MCD12Q1.A'+str(year)+'001.'+tile+'.hdf' for tile in AfrTileList]
+    if not os.path.isfile(outPath+'LandTypeScore/MCD12IGBPOrig.tif'):
+        AfrIGBPList = [gdal.Open(flnm, gdal.GA_ReadOnly).GetSubDatasets()[0][0] for flnm in AfrFileList]
+        GIS.resamp(' '.join(AfrIGBPList), outPath+'LandTypeScore/MCD12IGBPOrig.tif', method='near', resol='origin')
+    if not os.path.isfile(outPath+'LandTypeScore/MCD12PFTOrig.tif'):
+        AfrPFTList = [gdal.Open(flnm, gdal.GA_ReadOnly).GetSubDatasets()[4][0] for flnm in AfrFileList]
+        GIS.resamp(' '.join(AfrPFTList), outPath+'LandTypeScore/MCD12PFTOrig.tif', method='near', resol='origin')
+
+####################################################################################################
+def coverMask(thre=.1, maskNum=[0,16]):
+    '''
+    Calculate mask using a certain landcover type and a certain threshold.
+    '''
     src = dataPath + 'MODIS/MCD12Q1/'
     dst = outPath+'MCD12Q1/tile/'
     #water mask
@@ -332,22 +390,56 @@ def coverMask(thre=.1, maskNum=[0,16], northBound=None, southBound=None, westBou
         
         cover = GIS.read(infl)
         coverMask = np.zeros(cover.shape, dtype=np.bool)
-        for i in len(maskNum):
+        for i in range(len(maskNum)):
             coverMask = coverMask|(cover==maskNum[i])
         coverMask[np.isnan(cover)] = gNoData
         GIS.write(coverMask, outfl, infl, noData = gNoData, dtype=gdal.GDT_Int16)
+    
     GIS.mosa(dst+'MCD12Q1.mask.', outPath + 'MCD12Q1.maskAve.tif')
     maskAve = GIS.read(outPath + 'MCD12Q1.maskAve.tif')
-    mask = maskAve>thre
+    mask = (maskAve>thre).astype(np.float)
+    
+    mask[0:30,:] = 1
+    mask[np.isnan(maskAve)] = np.nan
+    GIS.write(mask, outPath+'MCD12Q1.mask.tif', outPath+'MCD12Q1.maskAve.tif', dtype=gdal.GDT_Int16)
+    plot.mapDraw(outPath+'MCD12Q1.mask.tif','mask.png', 'Tree Cover Percentage (%)',cmNm = 'jet', lut=2)
 
+####################################################################################################
+def coverCha(target=[12],mask=[0,17]):
+    '''
+    Caculate percentage of a certain landcover type.
+    '''
+    src = dataPath + 'MODIS/MCD12Q1/'
+    dst = outPath+'MCD12Q1/tile/'
+    tarStr = '_'.join(str(x) for x in target)
+    tarNmStr = '+'.join(sorted(MCD12Dict, key=MCD12Dict.get)[x] for x in target)
+    #water mask
+    for year in range(2001,2013):
+        for num in range(len(tileList)):
+            tile = 'h'+str(tileList[num][0]).zfill(2)+'v'+str(tileList[num][1]).zfill(2)
+            infl =  src+tile+'/MCD12Q1.A'+str(year)+'001.'+tile+'.hdf'
+            outfl = dst+'MCD12Q1.'+tarStr+'per.'+str(year)+'.'+tile+'.tif'
+            print 'coverPer: Calculating vegetation type percentage by tile.',year,tile
+
+            cover = GIS.read(infl)
+            coverBool = np.zeros(cover.shape, dtype=np.int)
+            for i in target:
+                coverBool[cover==i] = 100
+            for j in mask:
+                coverBool[cover==j] = gNoData
+            GIS.write(coverBool, outfl, infl)
+        GIS.mosa(dst+'MCD12Q1.'+tarStr+'per.'+str(year)+'.', outPath + 'MCD12Q1/MCD12Q1.'+tarStr+'per.'+str(year)+'.tif')
+    
+    coverPerTotal = np.dstack(GIS.read(outPath + 'MCD12Q1/MCD12Q1.'+tarStr+'per.'+str(year)+'.tif') for year in range(2001,2013))
+    coverPerCha = np.nanmean(coverPerTotal[:,:,1:]-coverPerTotal[:,:,0:-1], axis=2)
+    del coverPerTotal
+    GIS.write(coverPerCha, outPath+'coverPerCha'+tarStr+'.tif', outPath + 'MCD12Q1/MCD12Q1.'+tarStr+'per.2001.tif')
+
+    plot.mapDraw(outPath+'coverPerCha.'+tarStr+'.tif','coverPerCha'+tarStr+'.png', 'Annual Increase of '+tarNmStr+' (%/year)', maskNum=0, vMin=np.nanmin(coverPerCha)*.7, vMax=np.nanmax(coverPerCha)*.7)
 
 ####################################################################################################
 def maskCalcu():
     africaPath = dataPath +'/Africa/'
-    
-    #elev = GIS.resamp(dataPath + '/FAO/GloElev_30as.asc', africaPath+'/elev.africa.tif', resol = 'fine', sSrs = 'EPSG:4326')
-    #elevMask = (elev>1200)|(elev<0)
-    #elevMask = GIS.write(elevMask, africaPath+'elevMask.africa.tif', africaPath+'elev.africa.tif')
     
     cover = GIS.resamp(dataPath + '/GEM/GLC/glc2000_v1_1.tif', africaPath+'/GLC.africa.tif', resol = 'origin', sSrs = 'EPSG:4326')
     coverMask = cover==19
@@ -363,20 +455,80 @@ def maskCalcu():
     totalMask = GIS.write(totalMask, africaPath + 'totalMask.tif', africaPath + 'GLCMask.tif', dtype=gdal.GDT_Int16)
 
 ####################################################################################################
-def concealer()
-from osgeo import ogr
+def elevMask():   
+    sourceFile = dataPath + 'FAO/GloElev/GloElev_5min.asc'
+    originFile = dataPath + 'FAO/GloElev/GloElev_5min.africa.tif'
+    maskRawFile = dataPath + 'FAO/GloElev/elevMask_5min.africa.tif'
+    maskFile = outPath + 'elevMask.tif'
+    
+    GIS.resamp(sourceFile, originFile, resol = 'fine', sSrs = 'EPSG:4326')#, tSrs='',)
+    elev = GIS.read(originFile)
+    maskRaw = ((elev>1200)|(elev<0))*100.0
+    GIS.write(maskRaw, maskRawFile, originFile)
+    GIS.resamp(maskRawFile, maskFile)
 
-# Create ring
-ring = ogr.Geometry(ogr.wkbLinearRing)
-ring.AddPoint(1179091.1646903288, 712782.8838459781)
-ring.AddPoint(1161053.0218226474, 667456.2684348812)
-ring.AddPoint(1214704.933941905, 641092.8288590391)
-ring.AddPoint(1228580.428455506, 682719.3123998424)
-ring.AddPoint(1218405.0658121984, 721108.1805541387)
-ring.AddPoint(1179091.1646903288, 712782.8838459781)
+####################################################################################################
+def cattle(flnm=dataPath+'FAO/GLW/cattle/totcor/glbctd1t0503m'):
+    GIS.resamp(flnm, outPath+'cattle.tif')
+    plot.mapDraw(outPath+'cattle.tif', 'cattle.png', 'Cattle Density (number/square km)', maskNum = 0, log=True)    
+    return
 
-# Create polygon
-poly = ogr.Geometry(ogr.wkbPolygon)
-poly.AddGeometry(ring)
+####################################################################################################
+def popula(path='/data8/data/guol3/LandScan/2012/ArcGIS/'):
+    worldPeop = path + 'Population/lspop2012'
+    afriPeop = outPath + 'peopOrig.tif'
+    afriPopuOrig = outPath + 'popuOrig.tif'
+    afriPopu = outPath + 'popula.tif'
 
-print poly.ExportToWkt()
+    GIS.resamp(worldPeop, afriPeop, method='near', resol='origin', tSrs='')
+    
+    GIS.areaDiv(afriPeop, afriPopuOrig)
+    GIS.resamp(afriPopuOrig, afriPopu)
+
+    plot.mapDraw(afriPopu, 'popula.png', 'Population (number/square km)', maskNum=0, log = True) 
+    return
+
+####################################################################################################
+def LandTypeScore(DataNameList = ['GLC2009','MCD12IGBP','MCD12PFT'], TypeNameList = ['MaskScore','CropScore','GrassScore','ShrubScore','ForestScore'], decompose=False):
+    PathDict = {'GLC2009':dataPath + 'GEM/GLC/GLC2009/GLOBCOVER_L4_200901_200912_V2.3.tif','MCD12IGBP':dataPath+'/MODIS/MCD12Q1/MCD12IGBP2009.vrt', 'MCD12PFT':dataPath+'/MODIS/MCD12Q1/MCD12PFT2009.vrt','GLC2000':dataPath + 'GEM/GLC/GLC2000/glc2000_v1_1.tif'}
+    
+    def cover2score(FilePath, DataName, TypeNameList = TypeNameList, decompose=False):
+        import pandas as pd
+        origin = outPath+'LandTypeScore/'+DataName+'Orig.tif'
+        modeCover = outPath+'LandTypeScore/'+DataName+'.tif'
+        if not os.path.isfile(origin):
+            GIS.resamp(FilePath, origin, method='near',resol='origin')
+        if not os.path.isfile(modeCover):
+            GIS.resamp(FilePath, modeCover, method='mode')
+
+        raw = GIS.read(origin)
+        ref = pd.read_excel(outPath+'LandTypeScore/LandScoreRule.xls', DataName, index_col=None, na_values=['NaN'])
+        if decompose:
+            TypeNameList = list(ref['ShortName']) #decompose to seperate PFTs
+        for TypeName in TypeNameList:
+            if TypeName=='Ignore':
+                continue
+
+            RAWName = outPath+'LandTypeScore/'+DataName+TypeName+'RAW.tif'
+            outName = outPath+'LandTypeScore/'+DataName+TypeName+'.tif'
+            if True:#not os.path.isfile(RAWName):
+                ScoreMat = np.zeros(raw.shape)
+                if decompose:
+                    ScoreTable = ref[['Label','Value']]
+                    ScoreTable[TypeName] = ref['ShortName'].map(lambda x: 100 if x==TypeName else np.nan if x=='Ignore' else 0)
+                else:
+                    ScoreTable = ref[['Label','Value',TypeName]]
+                for ValSco in ScoreTable.iterrows():
+                    score = ValSco[1][TypeName]
+                    if score!=0:
+                        print 'cover2score:', DataName+',', TypeName+'.', ValSco[1]['Label']+':', ValSco[1][TypeName]
+                        ScoreMat[raw==ValSco[1]['Value']]=ValSco[1][TypeName]
+                GIS.write(ScoreMat, RAWName, origin)
+                del ScoreMat
+            if not os.path.isfile(outName):
+                GIS.resamp(RAWName, outName)
+            plot.mapDraw(outName, outName+'.png',DataName+', '+TypeName, vMin=0, vMax=80, cmNm='gist_ncar_r')
+    #####
+    for DataName in DataNameList:
+        print 'LandTypeScore:', DataName
+        cover2score(PathDict[DataName], DataName, decompose=decompose)
