@@ -35,7 +35,8 @@ def cleaner(dataList, mask=None, nameList=None, NaNCut=True, scalingPoint=None, 
     elif scalingPoint is not None:
         percenF = lambda x: np.percentile(x[~np.isnan(x)], scalingPoint) #calculate percentile
         percenList = [percenF(dataList[i]) for i in range(len(dataList))]
-        standard = np.max(percenList)
+        if standard is None:
+            standard = np.max(percenList)
         print 'Scaling standard:', scalingPoint, 'percentile =', standard
         for i in range(len(dataList)):
             dataList[i] = dataList[i]*standard/percenList[i]
@@ -79,7 +80,7 @@ def maskSamp(mask, contr, minEdge = None, maxEdge = None, inter = 100, size = 50
         maxEdge = (contr[mask].max()+0.999*inter).astype(int)
     
     for edge in range(minEdge, maxEdge, inter):
-        temMa = arraySamp((contr<=edge+inter)&(contr>=edge)&mask, size = size)
+        temMa = arraySamp((contr<=edge+inter)&(contr>edge)&mask, size = size)
         if temMa is None:
             print str(edge)+' to '+str(edge+inter)
             return None
@@ -123,19 +124,32 @@ def binPer(x, y , nbin = None, percen = 90, med = True):
         return xNew, yNew
 
 ####################################################################################################
-def autoBin(data, nBin, log=False):
+def autoBin(data, nBin, minWid=1e-3):
+    """
+    Find boundaries that divide data into bins with equal sample size, while bin wideth>=minWid.
+
+    Args:
+        data: Data to calculate boundaries from.
+        nBin: Number of desired bin.
+    
+    Return:
+        Array of boundaries.
+    """
+
     nanMask = ~np.isnan(data)
-    nData = nanMask.flatten().sum()
-    widBin = nData//nBin
+    nData = nanMask.flatten().sum() 
     dataSort = np.sort(data[nanMask])
-    if log:
-        dataSort[dataSort==0] = dataSort.min()/2.0
-        dataSort = np.log(dataSort)
-    bound = dataSort[0::widBin]
-    if len(bound)<nBin+1:
+    widBin = nData//nBin
+    bound = dataSort[0::widBin] #normal situation
+    if len(bound)<nBin+1: #rounding error
         bound = np.append(bound, dataSort[-1])
     else:
         bound[-1] = dataSort[-1]
-    if log:
-        bound = np.exp(bound)
+    
+    #####Restriction on bin width
+    for i in range(nBin-1):
+        if bound[i+1]-bound[i]<minWid:
+            bound[i+1]=bound[i]+minWid
+            bound[i+1:]=autoBin(data[data>=bound[i+1]], nBin-1-i)
+
     return bound

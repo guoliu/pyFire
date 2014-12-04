@@ -231,18 +231,21 @@ def scatter(xRaw, yRaw,  nmList, figNm, divider=None, text=None, percen=95, alph
 
 ####################################################################################################
 ####################################################################################################
-def indeValTreePDF(indeVal, depenVal, contr, valiMask=None, cutList = None, contrEdge = [1000,2000], suff='.pdf', nbin = 15, sampSize = 2, sampTime = 300):
+def resamPDF(dataList, nmList, valiMask=None, cutList = None, contrEdge = [1000,2000], suff='.pdf', nbin = 15, sampSize = 1, sampTime = 600):
     #noFireMaskRaw, indeValMaskRaw,
+    indeNm, depenNm, contrNm = nmList
+    indeVal, depenVal, contrVal = dataList
+    del dataList
+
     if valiMask is None:
-        valiMask=np.ones(depenVal.size,dtype=np.bool)
+        valiMask=np.ones(depenVal.shape,dtype=np.bool)
     valiMask = valiMask&(~np.isnan(depenVal))
-    print 'Total number: '+str(valiMask.sum())
 
     if cutList is None:
-        cutList = matr.autoBin(indeVal[~np.isnan(depenVal)], 5)
-        print 'indeValTreePDF: Auto bin boundaries: ',cutList
+        cutList = matr.autoBin(indeVal[valiMask], 4)
+        print 'resamPDF: Auto bin boundaries: ',cutList
 
-    SingSamp = lambda x: matr.maskSamp(x, contr, minEdge = contrEdge[0], maxEdge = contrEdge[1],  inter = 100, size=sampSize) #do sample for one time 
+    SingSamp = lambda x: matr.maskSamp(x, contrVal, minEdge = contrEdge[0], maxEdge = contrEdge[1],  inter = 100, size=sampSize) #do sample for once 
     MultiSamp = lambda mask: np.hstack(depenVal[SingSamp(mask)] for _ in range(sampTime))
 
     if suff[-4:]=='.pdf':
@@ -251,24 +254,24 @@ def indeValTreePDF(indeVal, depenVal, contr, valiMask=None, cutList = None, cont
     import matplotlib.pyplot as plt    
     fig, ax = plt.subplots(1)
     for i in range(len(cutList)-1):
-        labelTxt = 'Burning Fraction {:.3f}'.format(cutList[i])+' - {:.3f}'.format(cutList[i+1])
+        labelTxt = indeNm+': {:.3f}'.format(cutList[i])+' - {:.3f}'.format(cutList[i+1])
         print labelTxt
         mask = (indeVal>cutList[i])&(indeVal<=cutList[i+1])&valiMask
-        print 'Temporal indeVal number: '+str(((indeVal>cutList[i])&(indeVal<cutList[i+1])).sum())
-        print 'Temporal number: '+str(mask.sum())
+        print 'Sample size: '+str(mask.sum())
         plt.hist(MultiSamp(mask), histtype='stepfilled', color=plt.cm.jet(i/(len(cutList)-1.0)), alpha=0.3, edgecolor='k', bins=nbin, label=labelTxt, normed=True)
     plt.ylabel('Probability',  fontsize=14)
-    plt.xlabel('Percentage Tree Cover',  fontsize=14)
-    plt.title('Tree Cover for Burnt and Unburnt Pixels', fontsize=16)
+    plt.xlabel(depenNm,  fontsize=14)
+    plt.title(indeNm+' vs '+depenNm+', controlled by '+contrNm, fontsize=16)
     plt.legend(loc='upper center')
-    fig.savefig('indeValTreePDF'+str(contrEdge[0])+'to'+str(contrEdge[1])+suff, dpi = 300)
+
+    fig.savefig('resamPDF'+indeNm+depenNm+str(contrEdge[0])+'to'+str(contrEdge[1])+contrNm+suff, dpi = 300)
     plt.close()
 
 ####################################################################################################
 def treeCompare():
     tempPath = outPath+'LandTypeScore/'
     treeDict = {'treeMOD44': outPath + 'MOD44B.tif', 'treeMCD12PFT': outPath+'LandTypeScore/MCD12PFTForestScore.tif', 'treeMCD12IGBP': outPath+'LandTypeScore/MCD12IGBPForestScore.tif', 'treeGLC': outPath+'LandTypeScore/GLCForestScore.tif'}
-    dataList = matr.cleaner([GIS.read(treeDict[dataName]) for dataName in treeDict], NaNCut=False, scalingPoint=95)
+    dataList = matr.cleaner([GIS.read(treeDict[dataName]) for dataName in treeDict], NaNCut=False, standard=80, scalingPoint=100)
     
     i = 0
     for dataName in treeDict:
