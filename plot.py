@@ -231,17 +231,19 @@ def scatter(xRaw, yRaw,  nmList, figNm, divider=None, text=None, percen=95, alph
 
 ####################################################################################################
 ####################################################################################################
-def fireTreePDF(fire, valiMask, tree, preci, cutList = None, preciEdge = [1000,2000], suff='.pdf', nbin = 15, sampSize = 2, sampTime = 300):
-    #noFireMaskRaw, fireMaskRaw,
-    valiMask = valiMask&(~np.isnan(tree))
+def indeValTreePDF(indeVal, depenVal, contr, valiMask=None, cutList = None, contrEdge = [1000,2000], suff='.pdf', nbin = 15, sampSize = 2, sampTime = 300):
+    #noFireMaskRaw, indeValMaskRaw,
+    if valiMask is None:
+        valiMask=np.ones(depenVal.size,dtype=np.bool)
+    valiMask = valiMask&(~np.isnan(depenVal))
     print 'Total number: '+str(valiMask.sum())
 
     if cutList is None:
-        cutList = matr.autoBin(fire[~np.isnan(tree)], 5)
-        print 'fireTreePDF: Auto bin boundaries: ',cutList
+        cutList = matr.autoBin(indeVal[~np.isnan(depenVal)], 5)
+        print 'indeValTreePDF: Auto bin boundaries: ',cutList
 
-    SingSamp = lambda x: matr.maskSamp(x, preci, minEdge = preciEdge[0], maxEdge = preciEdge[1],  inter = 100, size=sampSize) #do sample for one time 
-    MultiSamp = lambda mask: np.hstack(tree[SingSamp(mask)] for _ in range(sampTime))
+    SingSamp = lambda x: matr.maskSamp(x, contr, minEdge = contrEdge[0], maxEdge = contrEdge[1],  inter = 100, size=sampSize) #do sample for one time 
+    MultiSamp = lambda mask: np.hstack(depenVal[SingSamp(mask)] for _ in range(sampTime))
 
     if suff[-4:]=='.pdf':
         mpl.use('PDF')
@@ -251,15 +253,15 @@ def fireTreePDF(fire, valiMask, tree, preci, cutList = None, preciEdge = [1000,2
     for i in range(len(cutList)-1):
         labelTxt = 'Burning Fraction {:.3f}'.format(cutList[i])+' - {:.3f}'.format(cutList[i+1])
         print labelTxt
-        mask = (fire>cutList[i])&(fire<=cutList[i+1])&valiMask
-        print 'Temporal fire number: '+str(((fire>cutList[i])&(fire<cutList[i+1])).sum())
+        mask = (indeVal>cutList[i])&(indeVal<=cutList[i+1])&valiMask
+        print 'Temporal indeVal number: '+str(((indeVal>cutList[i])&(indeVal<cutList[i+1])).sum())
         print 'Temporal number: '+str(mask.sum())
         plt.hist(MultiSamp(mask), histtype='stepfilled', color=plt.cm.jet(i/(len(cutList)-1.0)), alpha=0.3, edgecolor='k', bins=nbin, label=labelTxt, normed=True)
     plt.ylabel('Probability',  fontsize=14)
     plt.xlabel('Percentage Tree Cover',  fontsize=14)
     plt.title('Tree Cover for Burnt and Unburnt Pixels', fontsize=16)
     plt.legend(loc='upper center')
-    fig.savefig('fireTreePDF'+str(preciEdge[0])+'to'+str(preciEdge[1])+suff, dpi = 300)
+    fig.savefig('indeValTreePDF'+str(contrEdge[0])+'to'+str(contrEdge[1])+suff, dpi = 300)
     plt.close()
 
 ####################################################################################################
