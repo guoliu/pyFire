@@ -10,7 +10,7 @@ def reBin(a, shape):
     return np.nanmean(a.reshape(sh),axis=-1).mean(1)
 
 ####################################################################################################
-def cleaner(dataList, mask=None, nameList=None, NaNCut=True, scalingPoint=None, standard=None):
+def cleaner(dataList, mask=None, nameList=None, NaNCut=True, scalingPoint=None, maxPoint=None):
     """
     Through away the NaNs in multiple dataset with the same size, and/or output to Panda DataFrame if *nameList* is provided.
     
@@ -29,7 +29,10 @@ def cleaner(dataList, mask=None, nameList=None, NaNCut=True, scalingPoint=None, 
         for i in range(1,len(dataList)):
             comMask = comMask & (~np.isnan(dataList[i]))
     
-    if scalingPoint is not None:
+    if maxPoint is not None:
+        for i in range(len(dataList)):
+            dataList[i] = dataList[i]*maxPoint/np.nanmax(dataList[i])
+    elif scalingPoint is not None:
         percenF = lambda x: np.percentile(x[~np.isnan(x)], scalingPoint) #calculate percentile
         percenList = [percenF(dataList[i]) for i in range(len(dataList))]
         if standard is None:

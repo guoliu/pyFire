@@ -263,6 +263,7 @@ def resamPDF(dataList, nmList, valiMask=None, cutList = None, contrEdge = [1000,
     plt.xlabel(depenNm,  fontsize=14)
     plt.title(indeNm+' vs '+depenNm+', controlled by '+contrNm, fontsize=16)
     plt.legend(loc='upper center')
+
     fig.savefig('resamPDF'+indeNm+depenNm+str(contrEdge[0])+'to'+str(contrEdge[1])+contrNm+suff, dpi = 300)
     plt.close()
 
