@@ -1,4 +1,4 @@
-import os, random, numpy as np, matplotlib as mpl, numpy.ma as ma
+import os, random, numpy as np, numpy.ma as ma
 from osgeo import gdal, osr
 
 MCD12Dict = {'water': 0,

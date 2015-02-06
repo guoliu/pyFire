@@ -105,7 +105,7 @@ def binPer(x, y , nbin = None, percen = 90, med = True):
     
     xOrd = stats.rankdata(x,method='dense')
     if nbin is None:
-        nbin = np.max((xOrd.max()//150, 5))
+        nbin = np.max((xOrd.max()//100, 5))
         print 'Automatic bin number:', nbin
     else:
         print 'User assigned bin number:', nbin

@@ -180,7 +180,7 @@ def aver2D(x,y,z,xlabel,ylabel,zlabel,flnm):
     plt.close()
 
 ####################################################################################################
-def scatter(xRaw, yRaw,  nmList, figNm, divider=None, text=None, percen=95, alpha=0.4, upp = True, med = True):    
+def scatter(xRaw, yRaw,  nmList, figNm, nbin=None, divider=None, text=None, percen=90, alpha=0.4, upp = True, med = True):    
     """
     Draw scatter plot in groups, and calculated upper percentile and median. Accept and ignore NaNs.
 
@@ -195,7 +195,7 @@ def scatter(xRaw, yRaw,  nmList, figNm, divider=None, text=None, percen=95, alph
         titText, xText, yText = text
     
     if divider is None:
-        divider=np.zeros(xRaw.shape)
+        divider=np.zeros(xRaw.shape, dtype=np.int)
     if not np.nanmax(divider) == len(nmList)-1:
         print 'You sure you have the right length of name list?'
         print 'Maximum in divider:', np.nanmax(divider)
@@ -216,7 +216,7 @@ def scatter(xRaw, yRaw,  nmList, figNm, divider=None, text=None, percen=95, alph
         color = clm[i%8]
         ax.scatter(x, y, label=nmList[i], alpha=alpha, edgecolor=almost_black, facecolor=color, linewidth=0.15)
         alpha = alpha*.8
-    xNew, yUpp, yMed = matr.binPer(xRaw, yRaw, percen = percen)
+    xNew, yUpp, yMed = matr.binPer(xRaw, yRaw, nbin = nbin, percen = percen)
     ax.plot(xNew, yUpp, color='black', linewidth=0.7, label='Upper '+ str(percen) +' percentage', alpha=0.6)
     ax.plot(xNew, yMed, color='blue', linewidth=0.7, label='Median', alpha=0.6)
     axAdj(ax)
