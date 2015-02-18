@@ -4,7 +4,9 @@ from . import matr
 import seaborn as sns
 
 ####################################################################################################
-def mapDraw(flnm, fignm, titlTxt, projMap = 'cea', scale = 1.0, log = False, maskNum = None, vMin=None, vMax=None, cmNm = 'gist_ncar_r', lut = None):
+def mapDraw(flnm, titlTxt, fignm=None, projMap = 'cea', scale = 1.0, log = False, maskNum = None, vMin=None, vMax=None, cmNm = 'gist_ncar_r', lut = None):
+    if fignm is None:
+        fignm=flnm+'.png'
     print 'Plotting map from',flnm,'to', fignm
     from mpl_toolkits.basemap import Basemap
     from numpy import ma
@@ -41,11 +43,11 @@ def mapDraw(flnm, fignm, titlTxt, projMap = 'cea', scale = 1.0, log = False, mas
     import matplotlib.pyplot as plt
     fig = plt.figure()
     
-    m = Basemap(projection=projMap,llcrnrlat=-40,urcrnrlat=40,llcrnrlon=-20,urcrnrlon=55,resolution='c')
+    m = Basemap(projection=projMap,llcrnrlat=-50,urcrnrlat=50,llcrnrlon=-150,urcrnrlon=180,resolution='c') #extent
     m.drawcountries()
     m.drawcoastlines(linewidth=.5)
-    m.drawparallels(np.arange(-80,81,20),labels=[1,0,0,0])
-    m.drawmeridians(np.arange(0,360,20),labels=[0,0,0,1])
+    m.drawparallels(np.arange(-40,40,20),labels=[1,0,0,0])
+    m.drawmeridians(np.arange(-150,180,30),labels=[0,0,1,0])
     #m.fillcontinents(color='white',lake_color='aqua')
 
     outproj = osr.SpatialReference()
@@ -70,8 +72,10 @@ def mapDraw(flnm, fignm, titlTxt, projMap = 'cea', scale = 1.0, log = False, mas
         if vMax is None:
             vMax = np.max(data[np.isfinite(data)])
         im = m.pcolormesh(xx, yy, ma.array(data.T,mask=np.isnan(data.T)), cmap=colmap, vmin=vMin, vmax=vMax)
-    fig.colorbar(im, format='$%.2f$')
-    plt.title(titlTxt, fontsize=16)
+    #fig.colorbar(im, format='$%.2f$',orientation='horizontal')
+    cbar = plt.colorbar(im, format='$%.2f$', orientation='horizontal', aspect=20, fraction=0.2,pad=0.02)
+    cbar.set_label(titlTxt,size=18)
+    #plt.title(titlTxt, fontsize=16)
     
     plt.savefig(fignm, dpi = 400)
     plt.close()

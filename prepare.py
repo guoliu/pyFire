@@ -305,7 +305,7 @@ def trmmRot(): #fix rotation problem
     
             driver = gdal.GetDriverByName ('GTiff')
             dataset_out = driver.Create (monPreci, x_size, y_size, 1, gdal.GDT_Float32)
-            dataset_out.SetGeoTransform ((-180, 0.25, 0, 50, 0, -0.25)) #0,1,0,0,0,1. upper left x, pixel width, rotation,upper left y, rotation, pixel height
+            dataset_out.SetGeoTransform ((0, 0.25, 0, 50, 0, -0.25)) #0,1,0,0,0,1. upper left x, pixel width, rotation,upper left y, rotation, pixel height
             
             outRasterSRS = osr.SpatialReference() #set reference to lon/lat system
             outRasterSRS.ImportFromEPSG(4326)

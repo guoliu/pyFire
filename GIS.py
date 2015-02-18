@@ -23,7 +23,7 @@ def read(flnm, num=1):
     return data
 
 ####################################################################################################
-def resamp(inFile, outFile, method = 'average', noData = gNoData, resol = 'coarse', sSrs = '', tSrs='$DATA/MODIS.prf'):
+def resamp(inFile, outFile, region='africa', method = 'average', noData = gNoData, resol = 'coarse', sSrs = '', tSrs='$DATA/MODIS.prf'):
     """        
     Resample raster data, and crop to cutline. 
 
@@ -44,7 +44,7 @@ def resamp(inFile, outFile, method = 'average', noData = gNoData, resol = 'coars
         tSrs='-t_srs '+tSrs
 
     if resol=='coarse': 
-        tRes='-tr 27829.75 27829'
+        tRes='-tr 25630.65 27685.95'
     elif resol == 'fine':
         #tRes='-tr 5565.95 5565.95'
         tRes='-tr 2782.975 2782.9'
@@ -54,8 +54,10 @@ def resamp(inFile, outFile, method = 'average', noData = gNoData, resol = 'coars
         print 'Unsupported resulotion:', resol
         return
     
+    cutFile = '$DATA/vector/'+region+'.shp'
+
     #print 'gdalwarp -ot Float32 -wt Float32 -overwrite %s %s -cutline $DATA/Africa/Africa.shp -crop_to_cutline -dstnodata %s -r %s %s %s %s' %(sSrs, tSrs, str(noData), method, tRes, inFile, outFile)
-    os.system('gdalwarp -ot Float32 -wt Float32 -overwrite %s %s -cutline $DATA/Africa/Africa.shp -crop_to_cutline -dstnodata %s -r %s %s %s %s' %(sSrs, tSrs, str(noData), method, tRes, inFile, outFile))
+    os.system('gdalwarp -ot Float32 -wt Float32 -overwrite %s %s -cutline %s -crop_to_cutline -dstnodata %s -r %s %s %s %s' %(sSrs, tSrs, cutFile, str(noData), method, tRes, inFile, outFile))
 
     return
 
@@ -102,6 +104,43 @@ def mosa(oldPref, newFile, method='average', oldSuff='.tif'):
     
     resamp(tilestr, newFile, method=method)
     return
+ 
+####################################################################################################
+def create(extent, outShapefile): #(left, right, bottom, top)
+    # Create a Polygon from the extent tuple
+    ring = ogr.Geometry(ogr.wkbLinearRing)
+    ring.AddPoint(extent[0],extent[2])
+    ring.AddPoint(extent[1], extent[2])
+    ring.AddPoint(extent[1], extent[3])
+    ring.AddPoint(extent[0], extent[3])
+    ring.AddPoint(extent[0],extent[2])
+    poly = ogr.Geometry(ogr.wkbPolygon)
+    poly.AddGeometry(ring)
+    
+    # Save extent to a new Shapefile
+    outDriver = ogr.GetDriverByName("ESRI Shapefile")
+    
+    # Remove output shapefile if it already exists
+    if os.path.exists(outShapefile):
+        outDriver.DeleteDataSource(outShapefile)
+    
+    # Create the output shapefile
+    outDataSource = outDriver.CreateDataSource(outShapefile)
+    outLayer = outDataSource.CreateLayer("extent", geom_type=ogr.wkbPolygon)
+    
+    # Add an ID field
+    idField = ogr.FieldDefn("id", ogr.OFTInteger)
+    outLayer.CreateField(idField)
+    
+    # Create the feature and set values
+    featureDefn = outLayer.GetLayerDefn()
+    feature = ogr.Feature(featureDefn)
+    feature.SetGeometry(poly)
+    feature.SetField("id", 1)
+    outLayer.CreateFeature(feature)
+    
+    # Close DataSource
+    outDataSource.Destroy
 
 ####################################################################################################
 def cordConv(xy_source, inproj, outproj):
