@@ -153,7 +153,6 @@ def cordConv(xy_source, inproj, outproj):
     # so the the grid needs to be reshaped (flattened) and back.
     ct = osr.CoordinateTransformation(inproj, outproj)
     xy_target = np.array(ct.TransformPoints(xy_source.reshape(2, size).T))
-
     xx = xy_target[:,0].reshape(shape)
     yy = xy_target[:,1].reshape(shape)
 

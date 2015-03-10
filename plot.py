@@ -4,52 +4,63 @@ from . import matr
 import seaborn as sns
 
 ####################################################################################################
-def mapDraw(flnm, titlTxt, fignm=None, projMap = 'cea', scale = 1.0, log = False, maskNum = None, vMin=None, vMax=None, cmNm = 'gist_ncar_r', lut = None):
-    if fignm is None:
-        fignm=flnm+'.png'
-    print 'Plotting map from',flnm,'to', fignm
+def mapDraw(flnm, titlTxt=None, fignm = None, projMap = 'cea', scale = 1.0, log = False, maskNum = None, vMin=None, vMax=None, cmNm = 'gist_ncar_r', lut = None):
     from mpl_toolkits.basemap import Basemap
     from numpy import ma
     from matplotlib.colors import LogNorm
     
-    # Read the data and metadata
-    ds = gdal.Open(flnm)
-
-    data = GIS.read(flnm)*scale
-    gt = ds.GetGeoTransform()
-    proj = ds.GetProjection()
-
-    xres = gt[1]
-    yres = gt[5]
-
-    # get the edge coordinates and add half the resolution 
-    # to go to center coordinates
-    xmin = gt[0] + xres * 0.5
-    xmax = gt[0] + (xres * ds.RasterXSize) - xres * 0.5
-    ymin = gt[3] + (yres * ds.RasterYSize) + yres * 0.5
-    ymax = gt[3] - yres * 0.5
-
-    ds = None
-
-# create a grid of xy coordinates in the original projection
-    xy_source = np.mgrid[xmin:xmax+xres:xres, ymax+yres:ymin:yres]
-    
-    inproj = osr.SpatialReference()
-    inproj.ImportFromWkt(proj)
-
-
     ##Plotting
     #mpl.use('PDF')
     import matplotlib.pyplot as plt
     fig = plt.figure()
     
-    m = Basemap(projection=projMap,llcrnrlat=-50,urcrnrlat=50,llcrnrlon=-150,urcrnrlon=180,resolution='c') #extent
+    m = Basemap(projection=projMap,llcrnrlat=-90,urcrnrlat=90,llcrnrlon=-180,urcrnrlon=180,resolution='c') #extent
     m.drawcountries()
     m.drawcoastlines(linewidth=.5)
-    m.drawparallels(np.arange(-40,40,20),labels=[1,0,0,0])
-    m.drawmeridians(np.arange(-150,180,30),labels=[0,0,1,0])
+    m.drawparallels(np.arange(-90,90,30),labels=[1,0,0,0])
+    m.drawmeridians(np.arange(-180,180,60),labels=[0,0,1,0])
     #m.fillcontinents(color='white',lake_color='aqua')
-
+    
+    inproj = osr.SpatialReference()
+    if type(flnm) is str: #GDAL recongnized GIS data
+        print 'Input data: GIS dataset.'
+        if fignm is None:
+            fignm=flnm+'.png'
+        if titlTxt is None:
+            titlTxt=flnm
+        print 'Plotting map from',flnm,'to', fignm
+        
+        # Read the data and metadata
+        ds = gdal.Open(flnm)
+    
+        data = GIS.read(flnm)*scale
+        gt = ds.GetGeoTransform()
+        proj = ds.GetProjection()
+ 
+        xres = gt[1]
+        yres = gt[5]
+    
+        # get the edge coordinates and add half the resolution 
+        # to go to center coordinates
+        xmin = gt[0] + xres * 0.5
+        xmax = gt[0] + (xres * ds.RasterXSize) - xres * 0.5
+        ymin = gt[3] + (yres * ds.RasterYSize) + yres * 0.5
+        ymax = gt[3] - yres * 0.5
+        ds = None
+        # create a grid of xy coordinates in the original projection
+        inproj.ImportFromWkt(proj)
+    elif type(flnm) is np.ndarray:
+        print 'Input data: CLM dataset.'
+        xmin, xres, xmax = [-180+1.25/2, 1.25, 180-1.25/2]
+        ymin, yres, ymax = [-90+180.0/(193*2), -180.0/193, 90-180.0/(193*2)] 
+        ##### CLM: 0~360 =====> -180~180
+        inproj.ImportFromEPSG(4326)
+        data = np.hstack([flnm[:,288/2:],flnm[:,:288/2]])
+        del flnm
+    else:
+        print 'Input data type',type(flnm), 'not recongised.'
+        return False
+    xy_source = np.mgrid[xmin:xmax+xres:xres,ymax+yres:ymin:yres] 
     outproj = osr.SpatialReference()
     outproj.ImportFromProj4(m.proj4string)
     xx, yy = GIS.cordConv(xy_source, inproj, outproj)
@@ -184,7 +195,7 @@ def aver2D(x,y,z,xlabel,ylabel,zlabel,flnm):
     plt.close()
 
 ####################################################################################################
-def scatter(xRaw, yRaw,  nmList, figNm, nbin=None, divider=None, text=None, percen=90, alpha=0.4, upp = True, med = True):    
+def scatter(xRaw, yRaw,  nmList=None, figNm=None, nbin=None, divider=None, text=None, percen=95, alpha=0.4, upp = True, med = True):    
     """
     Draw scatter plot in groups, and calculated upper percentile and median. Accept and ignore NaNs.
 
@@ -207,29 +218,33 @@ def scatter(xRaw, yRaw,  nmList, figNm, nbin=None, divider=None, text=None, perc
         return
 
     xRaw, yRaw, divider = matr.cleaner([xRaw, yRaw, divider])
-    almost_black = '#262626'
-    import matplotlib.pyplot as plt, brewer2mpl
-    
-    clm = brewer2mpl.get_map('Set3', 'qualitative', 8, reverse=True).mpl_colors
-    
-    fig, ax = plt.subplots(1)
-    for i in range(np.nanmax(divider)+1):
-        print 'Plotting', nmList[i]
-        x = xRaw[divider==i]
-        y = yRaw[divider==i]
-        color = clm[i%8]
-        ax.scatter(x, y, label=nmList[i], alpha=alpha, edgecolor=almost_black, facecolor=color, linewidth=0.15)
-        alpha = alpha*.8
     xNew, yUpp, yMed = matr.binPer(xRaw, yRaw, nbin = nbin, percen = percen)
-    ax.plot(xNew, yUpp, color='black', linewidth=0.7, label='Upper '+ str(percen) +' percentage', alpha=0.6)
-    ax.plot(xNew, yMed, color='blue', linewidth=0.7, label='Median', alpha=0.6)
-    axAdj(ax)
-    ax.set_title(titText+': bin number='+str(xNew.size))
-    ax.set_xlabel(xText, fontsize=14)
-    ax.set_ylabel(yText, fontsize=14)
-    ax.set_xlim([np.nanmin(xRaw)*0.85,np.nanmax(xRaw)*1.1])
-    ax.set_ylim([np.nanmin(yRaw)*0.85,np.nanmax(yRaw)*1.1])  
-    fig.savefig(figNm, dpi=300)
+
+    if figNm is not None:
+        almost_black = '#262626'
+
+        import matplotlib.pyplot as plt, brewer2mpl
+    
+        clm = brewer2mpl.get_map('Set3', 'qualitative', 8, reverse=True).mpl_colors
+    
+        fig, ax = plt.subplots(1)
+        for i in range(np.nanmax(divider)+1):
+            print 'Plotting', nmList[i]
+            x = xRaw[divider==i]
+            y = yRaw[divider==i]
+            color = clm[i%8]
+            ax.scatter(x, y, label=nmList[i], alpha=alpha, edgecolor=almost_black, facecolor=color, linewidth=0.15)
+            alpha = alpha*.8
+        ax.plot(xNew, yUpp, color='black', linewidth=0.7, label='Upper '+ str(percen) +' percentage', alpha=0.6)
+        ax.plot(xNew, yMed, color='blue', linewidth=0.7, label='Median', alpha=0.6)
+        axAdj(ax)
+        ax.set_title(titText+': bin number='+str(xNew.size))
+        ax.set_xlabel(xText, fontsize=14)
+        ax.set_ylabel(yText, fontsize=14)
+        ax.set_xlim([np.nanmin(xRaw)*0.85,np.nanmax(xRaw)*1.1])
+        ax.set_ylim([np.nanmin(yRaw)*0.85,np.nanmax(yRaw)*1.1])  
+        fig.savefig(figNm, dpi=300)
+        fig.close()
 
     return xNew, yUpp
 
