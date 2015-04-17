@@ -527,7 +527,7 @@ def LandTypeScore(DataNameList = ['GLC2009','MCD12IGBP','MCD12PFT'], TypeNameLis
                 del ScoreMat
             if not os.path.isfile(outName):
                 GIS.resamp(RAWName, outName)
-            plot.mapDraw(outName, outName+'.png',DataName+', '+TypeName, vMin=0, vMax=80, cmNm='gist_ncar_r')
+            plot.mapDraw(outName, outName+'.png',DataName+', '+TypeName, vMin=0, vMax=80)
     #####
     for DataName in DataNameList:
         print 'LandTypeScore:', DataName

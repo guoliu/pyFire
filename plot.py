@@ -4,7 +4,7 @@ from . import matr
 import seaborn as sns
 
 ####################################################################################################
-def mapDraw(flnm, titlTxt=None, fignm = None, projMap = 'cea', scale = 1.0, log = False, maskNum = None, vMin=None, vMax=None, cmNm = 'gist_ncar_r', lut = None):
+def mapDraw(flnm, titlTxt=None, fignm = None, projMap = 'cea', scale = 1.0, log = False, maskNum = None, vMin=None, vMax=None, cmNm = 'terrain_r', lut = None):
     from mpl_toolkits.basemap import Basemap
     from numpy import ma
     from matplotlib.colors import LogNorm

@@ -3,6 +3,16 @@ from osgeo import ogr
 from osgeo import osr
 
 ####################################################################################################
+def areaGrid(res = [0.25,0.25], bound = [-180,90,180,-90], writeToDisk = False):
+    R = 6371 #km
+    import numpy as np
+    lat = np.arange(bound[1],bound[3]-res[1],-res[1])
+    latSin = np.sin(lat*np.pi/180)
+    col = R**2*res[0]*np.pi/180*(latSin[:-1]-latSin[1:])
+    grid = np.tile(col,[(bound[2]-bound[0])//res[0],1]).T
+    return grid 
+
+####################################################################################################
 def read(flnm, num=1):
     print 'Reading', flnm
     g = gdal.Open(flnm, gdal.GA_ReadOnly)
