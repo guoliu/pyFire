@@ -18,7 +18,7 @@ def cleaner(dataList, mask=None, nameList=None, NaNCut=True, scalingPoint=None, 
         dataList: list or tuple. Input data arrays.
         mask: matrix of bool, optional. Mask of invalid data.
         nameList: list of str, optional. List of columns names. Output to DataFrame if provided. Otherwise output is a list of arrays.
-        nanCut: bool, optinal. Through away NaNs.
+        NaNCut: bool, optinal. Throw away NaNs.
     
     Return:
         list (when *nameList* not provided) or DataFrame (when *nameList* is provided).
@@ -67,7 +67,7 @@ def arraySamp(array, size = 50):
         return None
     ind = np.array(random.sample(pool, size))
     new_array = np.zeros(array.shape,dtype=bool)
-    new_array[ind[:, 0], ind[:, 1]] = True
+    new_array[ind] = True
     return new_array
 
 ####################################################################################################

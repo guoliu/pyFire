@@ -33,7 +33,7 @@ def read(flnm, num=1):
     return data
 
 ####################################################################################################
-def resamp(inFile, outFile, region='africa', method = 'average', noData = gNoData, resol = 'coarse', sSrs = '', tSrs='$DATA/MODIS.prf'):
+def resamp(inFile, outFile, region='Africa', method = 'average', noData = gNoData, resol = 'coarse', sSrs = '', tSrs='EPSG:4326'):
     """        
     Resample raster data, and crop to cutline. 
 
@@ -44,9 +44,6 @@ def resamp(inFile, outFile, region='africa', method = 'average', noData = gNoDat
     """
     #EPSG:4326
     print 'Resampling', inFile
-    if tSrs!='$DATA/MODIS.prf' and resol!='origin':
-        print 'Only original resolution is supported for non-Sinusoidal projection. Falling back to "origin".'
-        resol='origin'
 
     if sSrs!='':
         sSrs='-s_srs '+sSrs
@@ -54,20 +51,21 @@ def resamp(inFile, outFile, region='africa', method = 'average', noData = gNoDat
         tSrs='-t_srs '+tSrs
 
     if resol=='coarse': 
-        tRes='-tr 25630.65 27685.95'
+        tRes='-tr 0.25 0.25'
     elif resol == 'fine':
         #tRes='-tr 5565.95 5565.95'
-        tRes='-tr 2782.975 2782.9'
+        tRes='-tr 0.05 0.05'
     elif resol == 'origin':
         tRes=''
     else: 
         print 'Unsupported resulotion:', resol
         return
     
-    cutFile = '$DATA/vector/'+region+'.shp'
-
-    #print 'gdalwarp -ot Float32 -wt Float32 -overwrite %s %s -cutline $DATA/Africa/Africa.shp -crop_to_cutline -dstnodata %s -r %s %s %s %s' %(sSrs, tSrs, str(noData), method, tRes, inFile, outFile)
-    os.system('gdalwarp -ot Float32 -wt Float32 -overwrite %s %s -cutline %s -crop_to_cutline -dstnodata %s -r %s %s %s %s' %(sSrs, tSrs, cutFile, str(noData), method, tRes, inFile, outFile))
+    if region == '':
+        os.system('gdalwarp -ot Float32 -wt Float32 -overwrite %s %s -dstnodata %s -r %s %s %s %s' %(sSrs, tSrs, str(noData), method, tRes, inFile, outFile))
+    else:
+        cutFile = '$DATA/cutboard/vector/'+region+'.shp'
+        os.system('gdalwarp -ot Float32 -wt Float32 -overwrite %s %s -cutline %s -crop_to_cutline -dstnodata %s -r %s %s %s %s' %(sSrs, tSrs, cutFile, str(noData), method, tRes, inFile, outFile))
 
     return
 

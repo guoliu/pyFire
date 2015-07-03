@@ -4,23 +4,11 @@ from . import matr
 import seaborn as sns
 
 ####################################################################################################
-def mapDraw(flnm, titlTxt=None, fignm = None, projMap = 'cea', scale = 1.0, log = False, maskNum = None, vMin=None, vMax=None, cmNm = 'terrain_r', lut = None):
+def mapDraw(flnm, titlTxt=None, barTxt = None, fignm = None, projMap = 'cea', scale = 1.0, log = False, maskNum = None, vMin=None, vMax=None, cmNm = 'terrain_r', lut = None, split = None):
     from mpl_toolkits.basemap import Basemap
     from numpy import ma
     from matplotlib.colors import LogNorm
-    
-    ##Plotting
-    #mpl.use('PDF')
-    import matplotlib.pyplot as plt
-    fig = plt.figure()
-    
-    m = Basemap(projection=projMap,llcrnrlat=-90,urcrnrlat=90,llcrnrlon=-180,urcrnrlon=180,resolution='c') #extent
-    m.drawcountries()
-    m.drawcoastlines(linewidth=.5)
-    m.drawparallels(np.arange(-90,90,30),labels=[1,0,0,0])
-    m.drawmeridians(np.arange(-180,180,60),labels=[0,0,1,0])
-    #m.fillcontinents(color='white',lake_color='aqua')
-    
+        
     inproj = osr.SpatialReference()
     if type(flnm) is str: #GDAL recongnized GIS data
         print 'Input data: GIS dataset.'
@@ -29,17 +17,13 @@ def mapDraw(flnm, titlTxt=None, fignm = None, projMap = 'cea', scale = 1.0, log 
         if titlTxt is None:
             titlTxt=flnm
         print 'Plotting map from',flnm,'to', fignm
-        
         # Read the data and metadata
         ds = gdal.Open(flnm)
-    
         data = GIS.read(flnm)*scale
         gt = ds.GetGeoTransform()
         proj = ds.GetProjection()
- 
         xres = gt[1]
         yres = gt[5]
-    
         # get the edge coordinates and add half the resolution 
         # to go to center coordinates
         xmin = gt[0] + xres * 0.5
@@ -60,14 +44,30 @@ def mapDraw(flnm, titlTxt=None, fignm = None, projMap = 'cea', scale = 1.0, log 
     else:
         print 'Input data type',type(flnm), 'not recongised.'
         return False
+    
+    import matplotlib.pyplot as plt
+    fig = plt.figure()
+    
+    m = Basemap(projection=projMap,llcrnrlat=ymin,urcrnrlat=min(ymax,90),llcrnrlon=xmin,urcrnrlon=xmax,resolution='c') #extent
+    m.drawcountries(linewidth=.1)
+    m.drawcoastlines(linewidth=.2)
+    m.drawparallels(np.arange(-60,60,30),labels=[1,0,0,0],linewidth=.3,color='grey')
+    m.drawmeridians(np.arange(-180,180,30),labels=[0,0,1,0],linewidth=.3,color='grey')
+    
     xy_source = np.mgrid[xmin:xmax+xres:xres,ymax+yres:ymin:yres] 
     outproj = osr.SpatialReference()
     outproj.ImportFromProj4(m.proj4string)
     xx, yy = GIS.cordConv(xy_source, inproj, outproj)
 
     # plot the data (first layer)
+    if split is not None:
+        lut = len(split)-1
+        dump = np.zeros(data.shape) * np.NaN
+        for j in range(len(split)):
+            dump[data >= split[j]] = j
+        data = dump
     colmap = plt.cm.get_cmap(cmNm, lut)
-    colmap.set_bad('w',1.)
+    colmap.set_bad('w')
     if maskNum is not None:
         data[data==maskNum] = np.nan
     
@@ -83,12 +83,24 @@ def mapDraw(flnm, titlTxt=None, fignm = None, projMap = 'cea', scale = 1.0, log 
         if vMax is None:
             vMax = np.max(data[np.isfinite(data)])
         im = m.pcolormesh(xx, yy, ma.array(data.T,mask=np.isnan(data.T)), cmap=colmap, vmin=vMin, vmax=vMax)
-    #fig.colorbar(im, format='$%.2f$',orientation='horizontal')
-    cbar = plt.colorbar(im, format='$%.2f$', orientation='horizontal', aspect=20, fraction=0.2,pad=0.02)
-    cbar.set_label(titlTxt,size=18)
-    #plt.title(titlTxt, fontsize=16)
     
-    plt.savefig(fignm, dpi = 400)
+    ax = plt.gca()
+    from mpl_toolkits.axes_grid1 import make_axes_locatable
+    divider = make_axes_locatable(ax)
+    cax = divider.append_axes('right', size="5%", pad=0.05)
+    cbar = plt.colorbar(im,cax=cax) 
+    if split is not None:
+        tick_temp = np.arange(len(split)+1)
+        cbar.set_ticks(tick_temp)
+        string = []
+        for l in range(len(split)):
+            string.append(str(split[l]))            
+        cbar.set_ticklabels(string)
+
+    if barTxt is not None:
+        cbar.set_label(barTxt)
+    #cbar.update_ticks()
+    plt.savefig(fignm, dpi = 500)
     plt.close()
 
 ####################################################################################################
@@ -250,7 +262,7 @@ def scatter(xRaw, yRaw,  nmList=None, figNm=None, nbin=None, divider=None, text=
 
 ####################################################################################################
 ####################################################################################################
-def resamPDF(dataList, nmList, valiMask=None, cutList = None, contrEdge = [1000,2000], suff='.pdf', nbin = 15, sampSize = 1, sampTime = 600):
+def resamPDF(dataList, nmList, valiMask=None, cutList = None, contrEdge = [1000,2000], suff='.png', nbin = 15, sampSize = 1, sampTime = 600):
     #noFireMaskRaw, indeValMaskRaw,
     indeNm, depenNm, contrNm = nmList
     indeVal, depenVal, contrVal = dataList
@@ -326,7 +338,7 @@ def explorer(data, name, hue=None, trel=True, corr=True):
         g.map_diag(plt.hist)
         g.map_upper(plt.scatter, s=10, alpha=.05)
     
-        g.savefig('trel_'+name, dpi=300)
+        g.savefig('trel_'+name, dpi = 300)
         plt.close()
 
     if corr:
